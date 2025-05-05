@@ -4,7 +4,7 @@ Module 2: SLURM Timelimit Monitoring
 Provides utilities to monitor remaining walltime and trigger checkpointing
 before SLURM terminates the job.
 
-1. Ensure get_remaining_time uses SLURM environement variables like scontrol show job_id to get accurate walltime.
+1. Ensure get_remaining_time uses SLURM environment variables like scontrol show job_id to get accurate walltime.
 2. Can use slurm job dependencies for chaining
 3. Ensure logs from resubmitted jobs are organized and do not overwrite previous logs.
 """
