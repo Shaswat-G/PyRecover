@@ -12,7 +12,7 @@ setup(
     author="Shaswat Gupta",
     author_email="shaswat.gupta.iitb@gmail.com",
     description="Distributed checkpointing manager for SLURM environments",
-    long_description=open("README.md").read(),
+    long_description=(lambda: open("README.md", "r", encoding="utf-8").read())(),
     long_description_content_type="text/markdown",
     url="https://github.com/Shaswat-G/pyrecover",
     classifiers=[
