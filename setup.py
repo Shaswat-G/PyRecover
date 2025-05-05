@@ -14,7 +14,7 @@ setup(
     description="Distributed checkpointing manager for SLURM environments",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/YOUR_USERNAME/pyrecover",
+    url="https://github.com/Shaswat-G/pyrecover",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
