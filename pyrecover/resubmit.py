@@ -2,6 +2,9 @@
 Module 3: Self-resubmitting SLURM Jobs
 
 Provides functionality to create and submit continuation jobs.
+
+1. Ensure logs from resubmitted jobs are organized and do not overwrite previous logs.
+
 """
 
 import os

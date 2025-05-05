@@ -1,8 +1,15 @@
 """
 Module 1: Distributed Checkpointing System
 
-Provides functionality for saving and loading distributed model checkpoints
-in PyTorch DDP/FSDP environments.
+Provides functionality for saving and loading distributed model checkpoints in PyTorch DDP/FSDP environments.
+
+1. Ensure that after saving/loading, all ranks synchronize (e.g., using dist.barrier()) to avoid inconsistencies.
+2. Use torch.save() and torch.load() for saving/loading model states, optimizers, and schedulers.
+3. Use torch.distributed.get_rank() to get the current rank and save/load checkpoints accordingly, only Rank 0 should save the checkpoint.
+4. Consider atomic file operations to avoid partial checkpoints.
+5. Can Store metadata (epoch, step, etc.) in the checkpoint for easier recovery.
+6. Add error handling for file I/O and distributed communication.
+
 """
 
 import os
