@@ -1,6 +1,6 @@
 from transformers import AutoTokenizer
 
-# Intitialize the tokenizer
+# Initialize the tokenizer
 tokenizer = AutoTokenizer.from_pretrained("unsloth/Mistral-Nemo-Base-2407-bnb-4bit")
 
 text = "Hello, I am a language model."
