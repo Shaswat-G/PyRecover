@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
+from iterable_dataset import IterableParquetDataset
 from model import Transformer, TransformerModelArgs
 from utils import build_lr_scheduler, clip_grad_norm_, get_args, get_num_params, get_num_flop_per_token, init_logger, logger, PRECISION_STR_TO_DTYPE, set_default_dtype
 
@@ -18,7 +19,10 @@ def train(args):
   # Set up DataLoader
   logger.info("Setting up DataLoaders...")
   tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path)
-  train_ds = ParquetDataset(args.dataset, tokenizer, args.sequence_length, args.batch_size*args.training_steps)
+  if args.iterable_dset:
+    train_ds = IterableParquetDataset(args.dataset, tokenizer, args.sequence_length)
+  else:
+    train_ds = ParquetDataset(args.dataset, tokenizer, args.sequence_length, args.batch_size*args.training_steps)
   train_collator = CollatorForCLM(args.sequence_length, tokenizer.pad_token_id)
   train_dl = DataLoader(train_ds,
                         batch_size=args.batch_size,

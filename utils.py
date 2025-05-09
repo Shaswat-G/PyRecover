@@ -109,6 +109,11 @@ def get_args():
         help="Path to a parquet file containing a 'text' column with documents (`str`)",
     )
     parser.add_argument(
+        "--iterable_dset",
+        "-id",
+        action="store_true",
+        help="Use IterableDataset")
+    parser.add_argument(
         "--tokenizer-name-or-path",
         type=str,
         default="unsloth/Mistral-Nemo-Base-2407-bnb-4bit",

@@ -1,17 +1,23 @@
 from dataset import ParquetDataset, CollatorForCLM
+from iterable_dataset import IterableParquetDataset
 from transformers import AutoTokenizer
 from torch.utils.data import DataLoader
-import torch
+import argparse
 
-def main():
+def main(use_iterable_dset: bool = False):
     tokenizer = AutoTokenizer.from_pretrained("unsloth/Mistral-Nemo-Base-2407-bnb-4bit")
     dataset_path = "/capstor/store/cscs/ethz/large-sc/datasets/train_data.parquet"
     
     sequence_length = 4096
     training_samples = 32
     batch_size = 32
-    
-    dataset = ParquetDataset(dataset_path, tokenizer, sequence_length, training_samples)
+
+    if use_iterable_dset:
+        dataset = IterableParquetDataset(dataset_path, tokenizer, sequence_length)
+    else:
+        dataset = ParquetDataset(dataset_path, tokenizer, sequence_length, training_samples)
+
+    # Setup collator and dataloader
     collator = CollatorForCLM(sequence_length=sequence_length, pad_token_id=tokenizer.pad_token_id)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=collator)
     
@@ -30,4 +36,7 @@ def main():
         break
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--iterable_dset", "-id", action="store_true", help="Use IterableDataset")
+    args = parser.parse_args()
+    main(args.iterable_dset)

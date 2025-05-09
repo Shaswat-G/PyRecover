@@ -7,7 +7,7 @@
 #SBATCH --partition=debug # Partition to use; "debug" is usually for quick tests
 #SBATCH --mem=460000 # Memory needed (simply set the mem of a node)
 #SBATCH --cpus-per-task=288 # CPU cores per task (simply set the number of cpus a node has)
-#SBATCH --environment=/users/shagupta/scratch/ngc_pt_jan.toml # the environment to use
+#SBATCH --environment=/users/rkreft/scratch/ngc_pt_jan.toml # the environment to use
 #SBATCH --output=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.out # log file for stdout / prints etc
 #SBATCH --error=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.err # log file for stderr / errors
 
@@ -23,10 +23,10 @@ echo "Current path: $(pwd)"
 echo "Current user: $(whoami)"
 
 # Change to the working directory
-cd /users/shagupta/scratch/assignment-2
+cd /users/$(whoami)/scratch/PyRecover
 
 # Create log directory
-LOG_DIR="/users/shagupta/scratch/assignment-2/benchmark_logs"
+LOG_DIR="/users/$(whoami)/scratch/PyRecover/logs"
 mkdir -p $LOG_DIR
 
 # Set common parameters
