@@ -2,7 +2,8 @@
 #SBATCH --job-name=llm_benchmark  # A name for your job. Visible in squeue.
 #SBATCH --account=a-large-sc
 #SBATCH --nodes=1 # Number of compute nodes to request.
-#SBATCH --ntasks-per-node=1 # Tasks (processes) per node
+#SBATCH --ntasks-per-node=4      # 4 tasks per node (1 per GPU)
+#SBATCH --gres=gpu:4             # Request 4 GPUs per node
 #SBATCH --time=00:44:00 # HH:MM:SS, set a time limit for this job (here 4 hours)
 #SBATCH --partition=debug # Partition to use; "debug" is usually for quick tests
 #SBATCH --mem=460000 # Memory needed (simply set the mem of a node)
@@ -39,6 +40,6 @@ echo "=== Starting Simple Training ==="
 echo "Will run for $TRAINING_STEPS steps"
 
 # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
-$BASE_CMD > $LOG_DIR/simple_train.log 2>&1
+srun python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ > $LOG_DIR/simple_train.log 2>&1
 echo "Training completed"
 
