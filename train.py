@@ -1,4 +1,3 @@
-import os
 import time
 
 import torch
@@ -6,6 +5,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
+from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0
 from iterable_dataset import IterableParquetDataset
 from model import Transformer, TransformerModelArgs
 from utils import (
@@ -15,78 +15,20 @@ from utils import (
     get_num_params,
     get_num_flop_per_token,
     init_logger,
-    logger,
     PRECISION_STR_TO_DTYPE,
     set_default_dtype,
 )
 
 
-# --- DDP minimal setup ---
-def is_distributed():
-    return "SLURM_PROCID" in os.environ and int(os.environ.get("SLURM_NTASKS", "1")) > 1
-
-
-def get_rank():
-    if is_distributed():
-        import torch.distributed as dist
-
-        return dist.get_rank()
-    return 0
-
-
-def is_rank0():
-    return get_rank() == 0
-
-
-def maybe_init_distributed():
-    if is_distributed():
-        import torch.distributed as dist
-
-        rank = int(os.environ["SLURM_PROCID"])
-        world_size = int(os.environ["SLURM_NTASKS"])
-        local_rank = int(os.environ.get("SLURM_LOCALID", 0))
-        os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", "127.0.0.1")
-        os.environ["MASTER_PORT"] = os.environ.get("MASTER_PORT", "29500")
-        dist.init_process_group(
-            backend="nccl",
-            rank=rank,
-            world_size=world_size,
-        )
-        torch.cuda.set_device(local_rank)
-        print(
-            f"[Rank {get_rank()}] world_size={world_size}, local_rank={local_rank}, pid={os.getpid()}",
-            flush=True,
-        )
-        if is_rank0():
-            logger.info(
-                f"DDP initialized: world_size={world_size}, local_rank={local_rank}, rank={get_rank()}, pid={os.getpid()}"
-            )
-        return local_rank, world_size
-    else:
-        return 0, 1
-
-
-def maybe_cleanup_distributed():
-    if is_distributed():
-        import torch.distributed as dist
-
-        dist.destroy_process_group()
-
-
-# --- end DDP minimal setup ---
-
-
 def train(args):
     local_rank, world_size = maybe_init_distributed()
-    if is_rank0():
-        logger.info(f"Experiment args: {args}")
+    log_rank0(f"Experiment args: {args}")
     # Init
     device = torch.device(f"cuda:{local_rank}")
     model_dtype = PRECISION_STR_TO_DTYPE[args.model_dtype]
 
     # Set up DataLoader
-    if is_rank0():
-        logger.info("Setting up DataLoaders...")
+    log_rank0("Setting up DataLoaders...")
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path)
     if args.iterable_dset:
         train_ds = IterableParquetDataset(args.dataset, tokenizer, args.sequence_length)
@@ -99,8 +41,8 @@ def train(args):
             args.batch_size * args.training_steps,
         )
         if world_size > 1:
+            # Set Distributed Sampler for DDP training
             from torch.utils.data.distributed import DistributedSampler
-
             train_sampler = DistributedSampler(
                 train_ds, num_replicas=world_size, rank=get_rank(), shuffle=True
             )
@@ -117,8 +59,7 @@ def train(args):
     train_dl_iterator = iter(train_dl)
 
     # Set up Model
-    if is_rank0():
-        logger.info("Setting up Model...")
+    log_rank0("Setting up Model with default config...")
     model_config = TransformerModelArgs(
         dim=4096,
         n_layers=32,
@@ -134,8 +75,7 @@ def train(args):
         model = Transformer(model_config).to(device)
 
     if args.compile:
-        if is_rank0():
-            logger.info("Using `torch.compile`")
+        log_rank0("Using `torch.compile`")
         model = torch.compile(model, fullgraph=True)
 
     if world_size > 1:
@@ -166,8 +106,7 @@ def train(args):
     ntraining_tokens_since_last_log = 0
     time_last_log = time.perf_counter()
 
-    if is_rank0():
-        logger.info("Starting training!")
+    log_rank0("Starting training!")
     train_step = 0
     while train_step < args.training_steps:
         train_step += 1
@@ -212,8 +151,7 @@ def train(args):
             tflops = num_flop_per_token * tps / 1e12
             training_tps = ntraining_tokens_since_last_log / time_delta
 
-            if is_rank0():
-                logger.info(
+            log_rank0(
                     f"Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
                 )
             ntokens_since_last_log = 0
@@ -224,8 +162,7 @@ def train(args):
         if args.profile and args.profile_step_end == train_step:
             torch.cuda.cudart().cudaProfilerStop()
 
-    if is_rank0():
-        logger.info("Training completed")
+    log_rank0("Training completed")
     maybe_cleanup_distributed()
 
 

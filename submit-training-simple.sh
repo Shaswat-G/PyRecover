@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=llm_benchmark  # A name for your job. Visible in squeue.
+#SBATCH --job-name=pyrecover_run  # A name for your job. Visible in squeue.
 #SBATCH --account=a-large-sc
 #SBATCH --nodes=1 # Number of compute nodes to request.
-#SBATCH --ntasks-per-node=4      # 4 tasks per node (1 per GPU)
+#SBATCH --ntasks-per-node=4      # 4 tasks per node (1 per GPU) (with torchrun this would be 1)
 #SBATCH --gres=gpu:4             # Request 4 GPUs per node
 #SBATCH --time=00:44:00 # HH:MM:SS, set a time limit for this job (here 4 hours)
 #SBATCH --partition=debug # Partition to use; "debug" is usually for quick tests
@@ -26,10 +26,6 @@ echo "Current user: $(whoami)"
 # Change to the working directory
 cd /users/$(whoami)/scratch/PyRecover
 
-# Create log directory
-LOG_DIR="/users/$(whoami)/scratch/PyRecover/logs"
-mkdir -p $LOG_DIR
-
 # Set common parameters
 TRAINING_STEPS=200
 LOGGING_FREQ=10
@@ -37,9 +33,9 @@ BASE_CMD="python3 train.py --training-steps $TRAINING_STEPS --logging-frequency 
 
 # Benchmarking configurations
 echo "=== Starting Simple Training ==="
-echo "Will run for $TRAINING_STEPS steps"
+echo "Will run for $TRAINING_STEPS steps (that's not epochs!)"
 
 # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
-srun python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ > $LOG_DIR/simple_train.log 2>&1
+srun python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ
 echo "Training completed"
 

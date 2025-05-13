@@ -148,6 +148,7 @@ def get_args():
         "--training-steps",
         type=int,
         default=1000,
+        help="Number of training steps to run. That is not the number of epochs!"
     )
     parser.add_argument(
         "--logging-frequency",
