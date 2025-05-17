@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=pyrecover_run  # A name for your job. Visible in squeue.
 #SBATCH --account=a-large-sc
-#SBATCH --nodes=1 # Number of compute nodes to request.
+#SBATCH --nodes=1 # On clariden we can only get resources in full node pieces
 #SBATCH --ntasks-per-node=4      # 4 tasks per node (1 per GPU) (with torchrun this would be 1)
 #SBATCH --gres=gpu:4             # Request 4 GPUs per node
 #SBATCH --time=00:44:00 # HH:MM:SS, set a time limit for this job (here 4 hours)
-#SBATCH --partition=debug # Partition to use; "debug" is usually for quick tests
-#SBATCH --mem=460000 # Memory needed (simply set the mem of a node)
+#SBATCH --partition=debug # "normal"(24h max runtime) or "debug"(30min max runtime)
+#SBATCH --mem=460000 # Memory needed (ignored as requesting full nodes)
 #SBATCH --cpus-per-task=288 # CPU cores per task (simply set the number of cpus a node has)
-#SBATCH --environment=/users/rkreft/scratch/ngc_pt_jan.toml # the environment to use
+#SBATCH --environment=/users/%u/scratch/ngc_pt_jan.toml # the environment to use
 #SBATCH --output=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.out # log file for stdout / prints etc
 #SBATCH --error=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.err # log file for stderr / errors
 
@@ -23,19 +23,27 @@ echo "CPUs per Task: $SLURM_CPUS_PER_TASK"
 echo "Current path: $(pwd)"
 echo "Current user: $(whoami)"
 
+# Parse command line arguments
+DISTRIBUTED_FLAG=""
+for arg in "$@"; do
+  if [ "$arg" == "--distributed" ]; then
+    DISTRIBUTED_FLAG="--distributed"
+    echo "Distributed mode enabled"
+  fi
+done
+
 # Change to the working directory
 cd /users/$(whoami)/scratch/PyRecover
 
 # Set common parameters
 TRAINING_STEPS=200
 LOGGING_FREQ=10
-BASE_CMD="python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ" #--iterable_dset"
 
 # Benchmarking configurations
 echo "=== Starting Simple Training ==="
 echo "Will run for $TRAINING_STEPS steps (that's not epochs!)"
 
 # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
-srun python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ
+srun python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG
 echo "Training completed"
 

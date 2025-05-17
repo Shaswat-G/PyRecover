@@ -189,5 +189,10 @@ def get_args():
         action='store_true',
         help="Set to compile the model with `torch.compile`"
     )
+    parser.add_argument(
+        "--distributed",
+        action='store_true',
+        help="Set to run distributed training. In this case detects number of GPUs and Nodes and launches DDP"
+    )
     args = parser.parse_args()
     return args

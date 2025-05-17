@@ -9,12 +9,12 @@ import torch
 from utils import logger
 
 # --- DDP minimal setup ---
-def is_distributed() -> bool:
+def is_distributed_slurm_env() -> bool:
     return "SLURM_PROCID" in os.environ and int(os.environ.get("SLURM_NTASKS", "1")) > 1
 
 
 def get_rank() -> int:
-    if is_distributed():
+    if is_distributed_slurm_env():
         import torch.distributed as dist
 
         return dist.get_rank()
@@ -29,8 +29,9 @@ def is_rank0() -> bool:
     return get_rank() == 0
 
 
-def maybe_init_distributed() -> Tuple[int, int]:
-    if is_distributed():
+def maybe_init_distributed(activate_distributed: bool) -> Tuple[int, int]:
+    if activate_distributed and is_distributed_slurm_env():
+        print("--DETECTED DISTRIBUTED SETUP, DO DISTRIBUTED TRAINING!--")
         import torch.distributed as dist
 
         rank = int(os.environ["SLURM_PROCID"])
@@ -53,11 +54,12 @@ def maybe_init_distributed() -> Tuple[int, int]:
             )
         return local_rank, world_size
     else:
+        print("--NOT RUNNING DISTRIBUTED TRAINING!--")
         return 0, 1
 
 
 def maybe_cleanup_distributed():
-    if is_distributed():
+    if is_distributed_slurm_env():
         import torch.distributed as dist
 
         dist.destroy_process_group()

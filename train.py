@@ -6,11 +6,9 @@ from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
 from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0
-from iterable_dataset import IterableParquetDataset
 from model import Transformer, TransformerModelArgs
 from utils import (
     build_lr_scheduler,
-    clip_grad_norm_,
     get_args,
     get_num_params,
     get_num_flop_per_token,
@@ -21,7 +19,8 @@ from utils import (
 
 
 def train(args):
-    local_rank, world_size = maybe_init_distributed()
+    # Set up distributed training if activated and Slurm env set!
+    local_rank, world_size = maybe_init_distributed(args.distributed)
     log_rank0(f"Experiment args: {args}")
     # Init
     device = torch.device(f"cuda:{local_rank}")
@@ -30,24 +29,20 @@ def train(args):
     # Set up DataLoader
     log_rank0("Setting up DataLoaders...")
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path)
-    if args.iterable_dset:
-        train_ds = IterableParquetDataset(args.dataset, tokenizer, args.sequence_length)
-        train_sampler = None
-    else:
-        train_ds = ParquetDataset(
-            args.dataset,
-            tokenizer,
-            args.sequence_length,
-            args.batch_size * args.training_steps,
+    train_ds = ParquetDataset(
+        args.dataset,
+        tokenizer,
+        args.sequence_length,
+        args.batch_size * args.training_steps,
+    )
+    if world_size > 1:
+        # Set Distributed Sampler for DDP training
+        from torch.utils.data.distributed import DistributedSampler
+        train_sampler = DistributedSampler(
+            train_ds, num_replicas=world_size, rank=get_rank(), shuffle=True
         )
-        if world_size > 1:
-            # Set Distributed Sampler for DDP training
-            from torch.utils.data.distributed import DistributedSampler
-            train_sampler = DistributedSampler(
-                train_ds, num_replicas=world_size, rank=get_rank(), shuffle=True
-            )
-        else:
-            train_sampler = None
+    else:
+        train_sampler = None
     train_collator = CollatorForCLM(args.sequence_length, tokenizer.pad_token_id)
     train_dl = DataLoader(
         train_ds,
