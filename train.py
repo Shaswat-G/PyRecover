@@ -35,6 +35,10 @@ def train(args):
         args.sequence_length,
         args.batch_size * args.training_steps,
     )
+    # set batch size
+    global_batch_size = int(args.batch_size)
+    local_batch_size = max(global_batch_size // world_size, 1)
+    log_rank0(f"Global batch size: {global_batch_size}\nLocal batch size: {local_batch_size}")
     if world_size > 1:
         # Set Distributed Sampler for DDP training
         from torch.utils.data.distributed import DistributedSampler
@@ -46,7 +50,7 @@ def train(args):
     train_collator = CollatorForCLM(args.sequence_length, tokenizer.pad_token_id)
     train_dl = DataLoader(
         train_ds,
-        batch_size=args.batch_size,
+        batch_size=local_batch_size,
         collate_fn=train_collator,
         sampler=train_sampler if train_sampler is not None else None,
         shuffle=(train_sampler is None),
@@ -103,6 +107,7 @@ def train(args):
 
     log_rank0("Starting training!")
     train_step = 0
+    epoch = 1
     while train_step < args.training_steps:
         train_step += 1
 
@@ -112,12 +117,21 @@ def train(args):
             torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
 
         if "train_sampler" in locals() and train_sampler is not None:
-            train_sampler.set_epoch(train_step)
+            train_sampler.set_epoch(train_step) # set epoch?
 
-        input_ids, labels = next(train_dl_iterator)
-        ntokens_since_last_log += args.batch_size * args.sequence_length
+        # restart with next epoch if needed
+        try:
+            input_ids, labels = next(train_dl_iterator)
+        except StopIteration as err:
+            train_dl_iterator = iter(train_dl)
+            epoch += 1
+
+        # capture metrics
+        ntokens_since_last_log += global_batch_size * args.sequence_length
         num_items_in_batch = labels.ne(-100).sum()
-        ntraining_tokens_since_last_log += num_items_in_batch
+        ntraining_tokens_since_last_log += num_items_in_batch.to("cpu") * world_size
+
+        # move inputs and labels to device
         input_ids = input_ids.to(device)
         labels = labels.to(device)
 
@@ -147,7 +161,7 @@ def train(args):
             training_tps = ntraining_tokens_since_last_log / time_delta
 
             log_rank0(
-                    f"Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
+                    f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
                 )
             ntokens_since_last_log = 0
             ntraining_tokens_since_last_log = 0

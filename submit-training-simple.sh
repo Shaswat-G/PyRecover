@@ -1,25 +1,24 @@
 #!/bin/bash
 #SBATCH --job-name=pyrecover_run  # A name for your job. Visible in squeue.
 #SBATCH --account=a-large-sc
-#SBATCH --nodes=1 # On clariden we can only get resources in full node pieces
+#SBATCH --nodes=4 # On clariden we can only get resources in full node pieces (thus its not needed to set memory or cpus)
 #SBATCH --ntasks-per-node=4      # 4 tasks per node (1 per GPU) (with torchrun this would be 1)
-#SBATCH --gres=gpu:4             # Request 4 GPUs per node
-#SBATCH --time=00:44:00 # HH:MM:SS, set a time limit for this job (here 4 hours)
+#SBATCH --gpus-per-node=4        # with our setup, set to 1 if train non parallel and 4 if training parallel 
+#SBATCH --time=00:05:00 # HH:MM:SS, set a time limit for this job (here 4 hours)
 #SBATCH --partition=debug # "normal"(24h max runtime) or "debug"(30min max runtime)
-#SBATCH --mem=460000 # Memory needed (ignored as requesting full nodes)
-#SBATCH --cpus-per-task=288 # CPU cores per task (simply set the number of cpus a node has)
-#SBATCH --environment=/users/%u/scratch/ngc_pt_jan.toml # the environment to use
+#SBATCH --environment=/users/rkreft/scratch/ngc_pt_jan.toml # the environment to use
 #SBATCH --output=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.out # log file for stdout / prints etc
 #SBATCH --error=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.err # log file for stderr / errors
 
 # Exit immediately if a command exits with a non-zero status (good practice)
 set -eo pipefail
 # Print SLURM variables so you see how your resources are allocated
-echo "Job Name: $SLURM_JOB_NAME"
-echo "Job ID: $SLURM_JOB_ID"
-echo "Allocated Node(s): $SLURM_NODELIST"
-echo "Number of Tasks: $SLURM_NTASKS"
-echo "CPUs per Task: $SLURM_CPUS_PER_TASK"
+echo "[sbatch-master] Job Name: $SLURM_JOB_NAME"
+echo "[sbatch-master] Job ID: $SLURM_JOB_ID"
+echo "[sbatch-master] Num Nodes: $SLURM_NNODES"
+echo "[sbatch-master] Allocated Node(s): $SLURM_NODELIST"
+echo "[sbatch-master] Number of Tasks(worldsize): $SLURM_NTASKS"
+echo "[sbatch-master] MasterNodeID: $SLURM_NODEID"
 echo "Current path: $(pwd)"
 echo "Current user: $(whoami)"
 
@@ -28,12 +27,19 @@ DISTRIBUTED_FLAG=""
 for arg in "$@"; do
   if [ "$arg" == "--distributed" ]; then
     DISTRIBUTED_FLAG="--distributed"
-    echo "Distributed mode enabled"
+    echo "LAUNCHING WITH DISTRIBUTED MODE"
   fi
 done
 
+# The defined environment vars will be shared with the other compute nodes.
+export MASTER_ADDR=$(scontrol show hostname "$SLURM_NODELIST" | head -n1)
+export MASTER_PORT=12345 # Choose an unused port
+export WORLD_SIZE=$(( SLURM_NNODES * SLURM_NTASKS_PER_NODE ))
+echo "[sbatch-master] execute command on compute nodes"
+
 # Change to the working directory
 cd /users/$(whoami)/scratch/PyRecover
+echo "cd to: $(pwd)"
 
 # Set common parameters
 TRAINING_STEPS=200
@@ -43,7 +49,17 @@ LOGGING_FREQ=10
 echo "=== Starting Simple Training ==="
 echo "Will run for $TRAINING_STEPS steps (that's not epochs!)"
 
+# PREPARE-TRAIN-CMD
+CMD="
+# print current environment variables
+echo \"[srun] rank=\$SLURM_PROCID host=\$(hostname) noderank=\$SLURM_NODEID localrank=\$SLURM_LOCALID\"
+# Need to change directory again as bash -c starts from base dir
+cd /users/$USER/scratch/PyRecover
+# run the script
+python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG
+"
+
 # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
-srun python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG
-echo "Training completed"
+srun bash -c "$CMD"
+echo "[sbatch-master] task finished"
 
