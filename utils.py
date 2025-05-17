@@ -148,6 +148,7 @@ def get_args():
         "--training-steps",
         type=int,
         default=1000,
+        help="Number of training steps to run. That is not the number of epochs!"
     )
     parser.add_argument(
         "--logging-frequency",
@@ -187,6 +188,11 @@ def get_args():
         "--compile",
         action='store_true',
         help="Set to compile the model with `torch.compile`"
+    )
+    parser.add_argument(
+        "--distributed",
+        action='store_true',
+        help="Set to run distributed training. In this case detects number of GPUs and Nodes and launches DDP"
     )
     args = parser.parse_args()
     return args

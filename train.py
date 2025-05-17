@@ -1,4 +1,3 @@
-import os
 import time
 
 import torch
@@ -6,32 +5,61 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
-from iterable_dataset import IterableParquetDataset
+from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0
 from model import Transformer, TransformerModelArgs
-from utils import build_lr_scheduler, clip_grad_norm_, get_args, get_num_params, get_num_flop_per_token, init_logger, logger, PRECISION_STR_TO_DTYPE, set_default_dtype
+from utils import (
+    build_lr_scheduler,
+    get_args,
+    get_num_params,
+    get_num_flop_per_token,
+    init_logger,
+    PRECISION_STR_TO_DTYPE,
+    set_default_dtype,
+)
+
 
 def train(args):
-  logger.info(f"Experiment args: {args}")
-  # Init
-  device = torch.device(f"cuda:{int(os.getenv('LOCAL_RANK', 0))}")
-  model_dtype = PRECISION_STR_TO_DTYPE[args.model_dtype]
+    # Set up distributed training if activated and Slurm env set!
+    local_rank, world_size = maybe_init_distributed(args.distributed)
+    log_rank0(f"Experiment args: {args}")
+    # Init
+    device = torch.device(f"cuda:{local_rank}")
+    model_dtype = PRECISION_STR_TO_DTYPE[args.model_dtype]
 
-  # Set up DataLoader
-  logger.info("Setting up DataLoaders...")
-  tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path)
-  if args.iterable_dset:
-    train_ds = IterableParquetDataset(args.dataset, tokenizer, args.sequence_length)
-  else:
-    train_ds = ParquetDataset(args.dataset, tokenizer, args.sequence_length, args.batch_size*args.training_steps)
-  train_collator = CollatorForCLM(args.sequence_length, tokenizer.pad_token_id)
-  train_dl = DataLoader(train_ds,
-                        batch_size=args.batch_size,
-                        collate_fn=train_collator)
-  train_dl_iterator = iter(train_dl)
+    # Set up DataLoader
+    log_rank0("Setting up DataLoaders...")
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path)
+    train_ds = ParquetDataset(
+        args.dataset,
+        tokenizer,
+        args.sequence_length,
+        args.batch_size * args.training_steps,
+    )
+    # set batch size
+    global_batch_size = int(args.batch_size)
+    local_batch_size = max(global_batch_size // world_size, 1)
+    log_rank0(f"Global batch size: {global_batch_size}\nLocal batch size: {local_batch_size}")
+    if world_size > 1:
+        # Set Distributed Sampler for DDP training
+        from torch.utils.data.distributed import DistributedSampler
+        train_sampler = DistributedSampler(
+            train_ds, num_replicas=world_size, rank=get_rank(), shuffle=True
+        )
+    else:
+        train_sampler = None
+    train_collator = CollatorForCLM(args.sequence_length, tokenizer.pad_token_id)
+    train_dl = DataLoader(
+        train_ds,
+        batch_size=local_batch_size,
+        collate_fn=train_collator,
+        sampler=train_sampler if train_sampler is not None else None,
+        shuffle=(train_sampler is None),
+    )
+    train_dl_iterator = iter(train_dl)
 
-  # Set up Model
-  logger.info("Setting up Model...")
-  model_config = TransformerModelArgs(
+    # Set up Model
+    log_rank0("Setting up Model with default config...")
+    model_config = TransformerModelArgs(
         dim=4096,
         n_layers=32,
         n_heads=32,
@@ -42,82 +70,112 @@ def train(args):
         vocab_size=tokenizer.vocab_size,
         seq_len=args.sequence_length,
     )
-  with set_default_dtype(model_dtype):
-    model = Transformer(model_config).to(device)
-  
-  if args.compile:
-    logger.info("Using `torch.compile`")
-    model = torch.compile(model, fullgraph=True)
-  
-  model.train()
+    with set_default_dtype(model_dtype):
+        model = Transformer(model_config).to(device)
 
-  # Build Optimizers & LR Scheduler
-  optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, fused=args.fused_optimizer)
-  lr_scheduler = build_lr_scheduler(optimizer, args.lr_warmup_steps)
+    if args.compile:
+        log_rank0("Using `torch.compile`")
+        model = torch.compile(model, fullgraph=True)
 
-  # Utils
-  num_flop_per_token = get_num_flop_per_token(
-      get_num_params(model, exclude_embedding=True),
-      model_config,
-  )
+    if world_size > 1:
+        from torch.nn.parallel import DistributedDataParallel as DDP
 
-  ntokens_since_last_log = 0
-  ntraining_tokens_since_last_log = 0
-  time_last_log = time.perf_counter()
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            find_unused_parameters=False,
+        )
 
-  logger.info("Starting training!")
-  train_step = 0
-  while train_step < args.training_steps:
-    train_step += 1
+    model.train()
 
-    # Profiling
-    if args.profile and args.profile_step_start == train_step:
-      torch.cuda.cudart().cudaProfilerStart()
-      torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
+    # Build Optimizers & LR Scheduler
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, fused=args.fused_optimizer
+    )
+    lr_scheduler = build_lr_scheduler(optimizer, args.lr_warmup_steps)
 
-    input_ids, labels = next(train_dl_iterator)
-    ntokens_since_last_log += args.batch_size * args.sequence_length
-    num_items_in_batch = labels.ne(-100).sum()
-    ntraining_tokens_since_last_log += num_items_in_batch
-    input_ids = input_ids.to(device)
-    labels = labels.to(device)
+    # Utils
+    num_flop_per_token = get_num_flop_per_token(
+        get_num_params(model, exclude_embedding=True),
+        model_config,
+    )
 
-    optimizer.zero_grad()
+    ntokens_since_last_log = 0
+    ntraining_tokens_since_last_log = 0
+    time_last_log = time.perf_counter()
 
-    logits = model(input_ids)
-    loss = torch.nn.functional.cross_entropy(logits.flatten(0, 1).float(), labels.flatten(0, 1), reduction="sum")
-    loss = loss / num_items_in_batch
-    del logits
-    loss.backward()
+    log_rank0("Starting training!")
+    train_step = 0
+    epoch = 1
+    while train_step < args.training_steps:
+        train_step += 1
 
-    # Clip gradients
-    # clip_grad_norm_(model.parameters(), args.grad_max_norm)
+        # Profiling
+        if args.profile and args.profile_step_start == train_step:
+            torch.cuda.cudart().cudaProfilerStart()
+            torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
 
-    optimizer.step()
-    lr_scheduler.step()
+        if "train_sampler" in locals() and train_sampler is not None:
+            train_sampler.set_epoch(train_step) # set epoch?
 
-    # Logging
-    if (train_step == 1 or train_step % args.logging_frequency == 0):
-      time_delta = time.perf_counter() - time_last_log
-      # tokens per second per device, abbreviated as tps
-      tps = ntokens_since_last_log / time_delta 
-      mfu = 100 * num_flop_per_token * tps / 989e12
-      tflops = num_flop_per_token * tps / 1e12
-      training_tps = ntraining_tokens_since_last_log / time_delta
+        # restart with next epoch if needed
+        try:
+            input_ids, labels = next(train_dl_iterator)
+        except StopIteration as err:
+            train_dl_iterator = iter(train_dl)
+            epoch += 1
 
-      logger.info(f"Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}")
-      ntokens_since_last_log = 0
-      ntraining_tokens_since_last_log = 0
-      time_last_log = time.perf_counter()
-    
-    # Profiling
-    if args.profile and args.profile_step_end == train_step:
-      torch.cuda.cudart().cudaProfilerStop()
+        # capture metrics
+        ntokens_since_last_log += global_batch_size * args.sequence_length
+        num_items_in_batch = labels.ne(-100).sum()
+        ntraining_tokens_since_last_log += num_items_in_batch.to("cpu") * world_size
 
+        # move inputs and labels to device
+        input_ids = input_ids.to(device)
+        labels = labels.to(device)
 
-  logger.info("Training completed")
+        optimizer.zero_grad()
+
+        logits = model(input_ids)
+        loss = torch.nn.functional.cross_entropy(
+            logits.flatten(0, 1).float(), labels.flatten(0, 1), reduction="sum"
+        )
+        loss = loss / num_items_in_batch
+        del logits
+        loss.backward()
+
+        # Clip gradients
+        # clip_grad_norm_(model.parameters(), args.grad_max_norm)
+
+        optimizer.step()
+        lr_scheduler.step()
+
+        # Logging
+        if train_step == 1 or train_step % args.logging_frequency == 0:
+            time_delta = time.perf_counter() - time_last_log
+            # tokens per second per device, abbreviated as tps
+            tps = ntokens_since_last_log / time_delta
+            mfu = 100 * num_flop_per_token * tps / 989e12
+            tflops = num_flop_per_token * tps / 1e12
+            training_tps = ntraining_tokens_since_last_log / time_delta
+
+            log_rank0(
+                    f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
+                )
+            ntokens_since_last_log = 0
+            ntraining_tokens_since_last_log = 0
+            time_last_log = time.perf_counter()
+
+        # Profiling
+        if args.profile and args.profile_step_end == train_step:
+            torch.cuda.cudart().cudaProfilerStop()
+
+    log_rank0("Training completed")
+    maybe_cleanup_distributed()
+
 
 if __name__ == "__main__":
-  init_logger()
-  args = get_args()
-  train(args)
+    init_logger()
+    args = get_args()
+    train(args)
