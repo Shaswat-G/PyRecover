@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -16,6 +17,7 @@ from utils import (
     PRECISION_STR_TO_DTYPE,
     set_default_dtype,
 )
+from pyrecover.checkpoint import save_ckpt, load_ckpt
 
 
 def train(args):
@@ -105,9 +107,28 @@ def train(args):
     ntraining_tokens_since_last_log = 0
     time_last_log = time.perf_counter()
 
-    log_rank0("Starting training!")
+    # Setup checkpoint dir
+    checkpoint_freq_steps = int(args.checkpoint_frequency)
+    ckpt_path = Path(args.checkpoint_dir)
+    if ckpt_path.exists() and not ckpt_path.is_dir():
+        exit(f"Checkpoint dir {ckpt_path} exists as file already! Abort!")
+    exp_ckpt_path = ckpt_path / args.exp_name
+    exp_ckpt_path.mkdir(parents=True, exist_ok=True)
+
+    # load checkpoint if wanted
     train_step = 0
     epoch = 1
+    if args.resume_from_checkpoint is not None:
+        log_rank0(f"Try resume from checkpoint {args.resume_from_checkpoint}")
+        train_step, epoch = load_ckpt(model,
+                                      optimizer,
+                                      lr_scheduler,
+                                      train_sampler,
+                                      args.resume_from_checkpoint,
+                                      experiment_dir=exp_ckpt_path,
+                                      verify=args.verify_checkpoints)
+
+    log_rank0("Starting training!")
     while train_step < args.training_steps:
         train_step += 1
 
@@ -117,7 +138,7 @@ def train(args):
             torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
 
         if "train_sampler" in locals() and train_sampler is not None:
-            train_sampler.set_epoch(train_step) # set epoch?
+            train_sampler.set_epoch(epoch)
 
         # restart with next epoch if needed
         try:
@@ -143,6 +164,7 @@ def train(args):
         )
         loss = loss / num_items_in_batch
         del logits
+        # In ddp setting, gradients are synced here
         loss.backward()
 
         # Clip gradients
@@ -166,6 +188,12 @@ def train(args):
             ntokens_since_last_log = 0
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
+
+        # Checkpointing
+        if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0 and is_rank0():
+            specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
+            log_rank0(f"Saving checkpoint to {specific_ckpt_path}")
+            save_ckpt(model, optimizer, lr_scheduler, train_sampler, train_step, epoch, specific_ckpt_path, verify=args.verify_checkpoints)
 
         # Profiling
         if args.profile and args.profile_step_end == train_step:

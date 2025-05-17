@@ -175,3 +175,7 @@ cython_debug/
 
 # Editor configurations
 .idea
+
+# local dev folders
+checkpoints/
+logs/
