@@ -6,7 +6,8 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
-from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0
+from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0, \
+    is_distributed_activated
 from model import Transformer, TransformerModelArgs
 from utils import (
     build_lr_scheduler,
@@ -118,7 +119,7 @@ def train(args):
     # load checkpoint if wanted
     train_step = 0
     epoch = 1
-    if args.resume_from_checkpoint is not None:
+    if args.resume_from_checkpoint is not None and is_rank0():
         log_rank0(f"Try resume from checkpoint {args.resume_from_checkpoint}")
         epoch, train_step = load_ckpt(model,
                                       optimizer,
@@ -126,7 +127,11 @@ def train(args):
                                       train_sampler,
                                       args.resume_from_checkpoint,
                                       experiment_dir=exp_ckpt_path,
-                                      verify=args.verify_checkpoints)
+                                      verify=args.verify_checkpoints,
+                                      is_distributed=(world_size > 1),
+                                      rank=get_rank())
+    if is_distributed_activated():
+        torch.distributed.barrier()
 
     log_rank0("Starting training!")
     while train_step < args.training_steps:
@@ -189,11 +194,21 @@ def train(args):
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
 
-        # Checkpointing
-        if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0 and is_rank0():
+        # Checkpointing (only rank0 stores checkpoint)
+        if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0:
             specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
             log_rank0(f"Saving checkpoint to {specific_ckpt_path}")
-            save_ckpt(model, optimizer, lr_scheduler, train_sampler, train_step, epoch, specific_ckpt_path, max_keep=args.max_kept_checkpoints, verify=args.verify_checkpoints)
+            save_ckpt(model,
+                      optimizer,
+                      lr_scheduler,
+                      train_sampler,
+                      train_step,
+                      epoch,
+                      specific_ckpt_path,
+                      max_keep=args.max_kept_checkpoints,
+                      verify=args.verify_checkpoints,
+                      is_distributed=(world_size > 1),
+                      rank=get_rank())
 
         # Profiling
         if args.profile and args.profile_step_end == train_step:
