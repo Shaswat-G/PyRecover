@@ -112,7 +112,7 @@ def train(args):
     ckpt_path = Path(args.checkpoint_dir)
     if ckpt_path.exists() and not ckpt_path.is_dir():
         exit(f"Checkpoint dir {ckpt_path} exists as file already! Abort!")
-    exp_ckpt_path = ckpt_path / args.exp_name
+    exp_ckpt_path = ckpt_path / args.experiment_name
     exp_ckpt_path.mkdir(parents=True, exist_ok=True)
 
     # load checkpoint if wanted
@@ -120,7 +120,7 @@ def train(args):
     epoch = 1
     if args.resume_from_checkpoint is not None:
         log_rank0(f"Try resume from checkpoint {args.resume_from_checkpoint}")
-        train_step, epoch = load_ckpt(model,
+        epoch, train_step = load_ckpt(model,
                                       optimizer,
                                       lr_scheduler,
                                       train_sampler,
@@ -193,7 +193,7 @@ def train(args):
         if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0 and is_rank0():
             specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
             log_rank0(f"Saving checkpoint to {specific_ckpt_path}")
-            save_ckpt(model, optimizer, lr_scheduler, train_sampler, train_step, epoch, specific_ckpt_path, verify=args.verify_checkpoints)
+            save_ckpt(model, optimizer, lr_scheduler, train_sampler, train_step, epoch, specific_ckpt_path, max_keep=args.max_kept_checkpoints, verify=args.verify_checkpoints)
 
         # Profiling
         if args.profile and args.profile_step_end == train_step:

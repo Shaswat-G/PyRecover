@@ -14,7 +14,7 @@ Provides functionality for saving and loading distributed model checkpoints in P
 
 import os
 from pathlib import Path
-from typing import Dict, Optional, Union, Any, Tuple
+from typing import Optional, Tuple
 
 import torch
 
@@ -71,11 +71,16 @@ def save_ckpt(
     # delete old checkpoints
     if max_keep > 0:
         ckpt_base_path = Path(checkpoint_path).parent
-        ckpt_files = [x.relative_to(ckpt_base_path) for x in ckpt_base_path.glob('**/*') if x.is_file()]
+        ckpt_files = [x.relative_to(ckpt_base_path) for x in ckpt_base_path.glob('**/*.pt') if x.is_file()]
         ckpt_files.sort()
         if len(ckpt_files) > max_keep:
             for f in ckpt_files[:-max_keep]:
-                os.remove(os.path.join(checkpoint_path, f))
+                specific_ckpt_path = os.path.join(ckpt_base_path, f)
+                os.remove(specific_ckpt_path)
+                checksum_file = Path(specific_ckpt_path, ".md5")
+                if checksum_file.exists():
+                    os.remove(checksum_file)
+
     return checkpoint_path
 
 
@@ -122,7 +127,7 @@ def load_ckpt(
 
     model.module.load_state_dict(checkpoint["model"])  # .module for DDP
     optimizer.load_state_dict(checkpoint["optimizer"])
-    lr_scheduler.load_state_dict(checkpoint["scheduler"])
+    lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
 
     epoch = checkpoint.get("epoch", 0)
     step = checkpoint.get("step", 0)
@@ -137,7 +142,7 @@ def load_ckpt(
 def get_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
     """Get latest checkpoint in directory. Can be experiment checkpoint directory"""
     ckpt_base_path = Path(checkpoint_dir)
-    ckpt_files = [x.relative_to(ckpt_base_path) for x in ckpt_base_path.glob('**/*') if x.is_file()]
+    ckpt_files = [x.relative_to(ckpt_base_path) for x in ckpt_base_path.glob('**/*.pt') if x.is_file()]
     ckpt_files.sort()
     if len(ckpt_files) > 0:
         return os.path.join(checkpoint_dir, ckpt_files[-1])

@@ -223,5 +223,11 @@ def get_args():
         action='store_true',
         help="Verify checkpoints with checksums"
     )
+    parser.add_argument(
+        "--max-kept-checkpoints",
+        type=int,
+        default=3,
+        help="Maximum number of checkpoints to keep."
+    )
     args = parser.parse_args()
     return args
