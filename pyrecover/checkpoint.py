@@ -12,6 +12,7 @@ Provides functionality for saving and loading distributed model checkpoints in P
 
 """
 
+import time
 import os
 from pathlib import Path
 from typing import Optional, Tuple
@@ -122,6 +123,12 @@ def load_ckpt(
     Returns:
         Return epoch and step number loaded from checkpoint.
     """
+    if is_distributed:
+        dist.barrier()
+        # Stagger loading to avoid I/O contention
+        stagger_time = 3.0 * rank  # 3 seconds between ranks
+        time.sleep(stagger_time)
+
     if checkpoint_path == "latest":
         checkpoint_path = get_latest_checkpoint(experiment_dir)
         if checkpoint_path is None:
@@ -129,13 +136,10 @@ def load_ckpt(
 
     device = torch.device('cuda', torch.cuda.current_device())
     assert model.device == device, "Model device does not match checkpoint device"
-    assert optimizer.state_dict()["param_groups"][0]["params"][0].device == device, "Optimizer device does not match checkpoint device"
-    assert lr_scheduler.state_dict()["optimizer"] == optimizer, "Optimizer device does not match checkpoint device"
-    checkpoint = None
-    checkpoint_keys = None
     if rank == 0:
         # verify checksum if needed
         if verify:
+            print("Verify checkpoint...")
             import hashlib
             with open(checkpoint_path, 'rb') as f:
                 file_hash = hashlib.md5(f.read()).hexdigest()
@@ -145,90 +149,31 @@ def load_ckpt(
             if ckpt_hash != file_hash:
                 raise RuntimeError(f"Checksum mismatch for checkpoint {checkpoint_path}")
             print(f"Checksum verified for checkpoint {checkpoint_path}")
-        # load checkpoint only rank 0
-        checkpoint = torch.load(checkpoint_path, map_location=device)
-        checkpoint_keys = list(checkpoint.keys())
+    # load checkpoint directly to device!
+    print("Loading checkpoint...")
+    checkpoint = torch.load(checkpoint_path, map_location=device, mmap=True)
 
-        # Load model state dictionary
-        if hasattr(model, 'module'):
-            model.module.load_state_dict(checkpoint["model"])
-        else:
-            model.load_state_dict(checkpoint["model"])
-
-        # Load optimizer state
-        optimizer.load_state_dict(checkpoint["optimizer"])
-
-        # Load lr_scheduler state if present
-        if lr_scheduler is not None and "lr_scheduler" in checkpoint:
-            lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-
-        # Load sampler state if present
-        if sampler and "sampler_state" in checkpoint:
-            sampler.load_state_dict(checkpoint["sampler_state"])
-
-        epoch = checkpoint.get("epoch", 0)
-        step = checkpoint.get("step", 0)
+    # Load model state dictionary
+    if hasattr(model, 'module'):
+        model.module.load_state_dict(checkpoint["model"])
     else:
-        epoch = step = None
+        model.load_state_dict(checkpoint["model"])
+
+    # Load optimizer state
+    optimizer.load_state_dict(checkpoint["optimizer"])
+
+    # Load lr_scheduler state if present
+    if lr_scheduler is not None and "lr_scheduler" in checkpoint:
+        lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+
+    # Load sampler state if present
+    if sampler and "sampler_state" in checkpoint:
+        sampler.load_state_dict(checkpoint["sampler_state"])
+
+    epoch = checkpoint.get("epoch", 0)
+    step = checkpoint.get("step", 0)
 
     if is_distributed:
-        # Broadcast list of checkpoint keys for guards
-        if rank == 0:
-            key_list = checkpoint_keys
-        else:
-            key_list = None
-        key_list = [key_list]
-        dist.broadcast_object_list(key_list, src=0)
-        checkpoint_keys = key_list[0]
-
-        # Broadcast model weights
-        for param in model.parameters():
-            dist.broadcast(param.data, 0)
-
-        # Broadcast epoch and step (ensure 'cuda' device)
-        # Broadcast epoch and step
-        if rank == 0:
-            epoch_step = torch.tensor([epoch, step], dtype=torch.long, device=device)
-        else:
-            epoch_step = torch.zeros(2, dtype=torch.long, device=device)
-        dist.broadcast(epoch_step, 0)
-        if rank != 0:
-            epoch, step = epoch_step.tolist()
-            print(f"Rank {rank}: Model parameters received via broadcast (epoch {epoch}, step {step})")
-
-        # Broadcast and load lr_scheduler state if present
-        if lr_scheduler is not None and "lr_scheduler" in checkpoint_keys:
-            if rank == 0:
-                sched_state = lr_scheduler.state_dict()
-            else:
-                sched_state = None
-            sched_state = [sched_state]
-            dist.broadcast_object_list(sched_state, src=0)
-            if rank != 0:
-                lr_scheduler.load_state_dict(sched_state[0])
-
-        # Broadcast and load sampler state if present
-        if sampler and "sampler_state" in checkpoint_keys:
-            if rank == 0:
-                sampler_state = sampler.state_dict()
-            else:
-                sampler_state = None
-            sampler_state = [sampler_state]
-            dist.broadcast_object_list(sampler_state, src=0)
-            if rank != 0:
-                sampler.load_state_dict(sampler_state[0])
-
-        # Broadcast and load optimizer state
-        if "optimizer" in checkpoint_keys:
-            if rank == 0:
-                opt_state = optimizer.state_dict()
-            else:
-                opt_state = None
-            opt_state = [opt_state]
-            dist.broadcast_object_list(opt_state, src=0)
-            if rank != 0:
-                optimizer.load_state_dict(opt_state[0])
-
         dist.barrier()
 
     print(f"Checkpoint loaded from {checkpoint_path} (epoch {epoch}, step {step})")
