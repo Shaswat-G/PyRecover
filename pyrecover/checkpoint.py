@@ -21,7 +21,7 @@ import torch
 import torch.distributed as dist
 
 
-def save_ckpt(
+def save_ckpt_vanilla(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
@@ -94,7 +94,7 @@ def save_ckpt(
     return checkpoint_path
 
 
-def load_ckpt(
+def load_ckpt_vanilla(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
@@ -123,6 +123,8 @@ def load_ckpt(
     Returns:
         Return epoch and step number loaded from checkpoint.
     """
+    import threading
+    
     if is_distributed:
         dist.barrier()
         # Stagger loading to avoid I/O contention
@@ -136,21 +138,34 @@ def load_ckpt(
 
     device = torch.device('cuda', torch.cuda.current_device())
     assert model.device == device, "Model device does not match checkpoint device"
-    if rank == 0:
-        # verify checksum if needed
-        if verify:
-            print("Verify checkpoint...")
-            import hashlib
-            with open(checkpoint_path, 'rb') as f:
-                file_hash = hashlib.md5(f.read()).hexdigest()
-            checksum_path = f"{checkpoint_path}.md5"
-            with open(checksum_path, 'r') as f:
-                ckpt_hash = f.read()
-            if ckpt_hash != file_hash:
-                raise RuntimeError(f"Checksum mismatch for checkpoint {checkpoint_path}")
-            print(f"Checksum verified for checkpoint {checkpoint_path}")
-    # load checkpoint directly to device!
-    print("Loading checkpoint...")
+    
+    # Start async verification for rank 0 if needed
+    verification_thread = None
+    verification_result = {"valid": True, "error": None}
+    
+    if rank == 0 and verify:
+        def verify_checkpoint():
+            try:
+                print("Verifying checkpoint (async)...")
+                import hashlib
+                with open(checkpoint_path, 'rb') as f:
+                    file_hash = hashlib.md5(f.read()).hexdigest()
+                checksum_path = f"{checkpoint_path}.md5"
+                with open(checksum_path, 'r') as f:
+                    ckpt_hash = f.read()
+                if ckpt_hash != file_hash:
+                    verification_result["valid"] = False
+                    verification_result["error"] = f"Checksum mismatch for checkpoint {checkpoint_path}"
+                print("Checkpoint verification completed")
+            except Exception as e:
+                verification_result["valid"] = False
+                verification_result["error"] = str(e)
+        
+        verification_thread = threading.Thread(target=verify_checkpoint)
+        verification_thread.start()
+    
+    # Load checkpoint for all ranks
+    print(f"Loading checkpoint from {checkpoint_path}...")
     checkpoint = torch.load(checkpoint_path, map_location=device, mmap=True)
 
     # Load model state dictionary
@@ -172,6 +187,13 @@ def load_ckpt(
 
     epoch = checkpoint.get("epoch", 0)
     step = checkpoint.get("step", 0)
+
+    # Wait for verification to complete if it was started
+    if verification_thread is not None:
+        verification_thread.join()
+        if not verification_result["valid"]:
+            raise RuntimeError(verification_result["error"])
+        print("Checkpoint verification successful")
 
     if is_distributed:
         dist.barrier()

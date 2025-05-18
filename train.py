@@ -18,7 +18,7 @@ from utils import (
     PRECISION_STR_TO_DTYPE,
     set_default_dtype,
 )
-from pyrecover.checkpoint import save_ckpt, load_ckpt
+from pyrecover.checkpoint import save_ckpt_vanilla, load_ckpt_vanilla
 
 
 def train(args):
@@ -119,17 +119,22 @@ def train(args):
     # load checkpoint if wanted
     train_step = 0
     epoch = 1
-    if args.resume_from_checkpoint is not None and is_rank0():
+    if args.resume_from_checkpoint is not None:
         log_rank0(f"Try resume from checkpoint {args.resume_from_checkpoint}")
-        epoch, train_step = load_ckpt(model,
-                                      optimizer,
-                                      lr_scheduler,
-                                      train_sampler,
-                                      args.resume_from_checkpoint,
-                                      experiment_dir=exp_ckpt_path,
-                                      verify=args.verify_checkpoints,
-                                      is_distributed=(world_size > 1),
-                                      rank=get_rank())
+        # Measure checkpoint loading time
+        checkpoint_load_start = time.perf_counter()
+        epoch, train_step = load_ckpt_vanilla(model,
+                                             optimizer,
+                                             lr_scheduler,
+                                             train_sampler,
+                                             args.resume_from_checkpoint,
+                                             experiment_dir=exp_ckpt_path,
+                                             verify=args.verify_checkpoints,
+                                             is_distributed=(world_size > 1),
+                                             rank=get_rank())
+        checkpoint_load_time = time.perf_counter() - checkpoint_load_start
+        log_rank0(f"Checkpoint loading completed in {checkpoint_load_time:.2f} seconds")
+        
     if is_distributed_activated():
         torch.distributed.barrier()
 
@@ -198,17 +203,20 @@ def train(args):
         if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0:
             specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
             log_rank0(f"Saving checkpoint to {specific_ckpt_path}")
-            save_ckpt(model,
-                      optimizer,
-                      lr_scheduler,
-                      train_sampler,
-                      train_step,
-                      epoch,
-                      specific_ckpt_path,
-                      max_keep=args.max_kept_checkpoints,
-                      verify=args.verify_checkpoints,
-                      is_distributed=(world_size > 1),
-                      rank=get_rank())
+            checkpoint_store_start = time.perf_counter()
+            save_ckpt_vanilla(model,
+                              optimizer,
+                              lr_scheduler,
+                              train_sampler,
+                              train_step,
+                              epoch,
+                              specific_ckpt_path,
+                              max_keep=args.max_kept_checkpoints,
+                              verify=args.verify_checkpoints,
+                              is_distributed=(world_size > 1),
+                              rank=get_rank())
+            checkpoint_store_time = time.perf_counter() - checkpoint_store_start
+            log_rank0(f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds")
 
         # Profiling
         if args.profile and args.profile_step_end == train_step:
