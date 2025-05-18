@@ -18,7 +18,12 @@ from utils import (
     PRECISION_STR_TO_DTYPE,
     set_default_dtype,
 )
-from pyrecover.checkpoint import save_ckpt_vanilla, load_ckpt_vanilla
+from pyrecover.checkpoint import (
+    save_ckpt_vanilla, 
+    load_ckpt_vanilla,
+    save_ckpt_distributed,
+    load_ckpt_distributed
+)
 
 
 def train(args):
@@ -116,6 +121,16 @@ def train(args):
     exp_ckpt_path = ckpt_path / args.experiment_name
     exp_ckpt_path.mkdir(parents=True, exist_ok=True)
 
+    # Select checkpoint save/load functions based on args
+    if args.use_torch_distributed_ckpt:
+        log_rank0("Using torch.distributed.checkpoint for checkpointing")
+        save_ckpt_fn = save_ckpt_distributed
+        load_ckpt_fn = load_ckpt_distributed
+    else:
+        log_rank0("Using vanilla PyTorch checkpointing")
+        save_ckpt_fn = save_ckpt_vanilla
+        load_ckpt_fn = load_ckpt_vanilla
+
     # load checkpoint if wanted
     train_step = 0
     epoch = 1
@@ -123,15 +138,15 @@ def train(args):
         log_rank0(f"Try resume from checkpoint {args.resume_from_checkpoint}")
         # Measure checkpoint loading time
         checkpoint_load_start = time.perf_counter()
-        epoch, train_step = load_ckpt_vanilla(model,
-                                             optimizer,
-                                             lr_scheduler,
-                                             train_sampler,
-                                             args.resume_from_checkpoint,
-                                             experiment_dir=exp_ckpt_path,
-                                             verify=args.verify_checkpoints,
-                                             is_distributed=(world_size > 1),
-                                             rank=get_rank())
+        epoch, train_step = load_ckpt_fn(model,
+                                         optimizer,
+                                         lr_scheduler,
+                                         train_sampler,
+                                         args.resume_from_checkpoint,
+                                         experiment_dir=exp_ckpt_path,
+                                         verify=args.verify_checkpoints,
+                                         is_distributed=(world_size > 1),
+                                         rank=get_rank())
         checkpoint_load_time = time.perf_counter() - checkpoint_load_start
         log_rank0(f"Checkpoint loading completed in {checkpoint_load_time:.2f} seconds")
         
@@ -199,22 +214,27 @@ def train(args):
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
 
-        # Checkpointing (only rank0 stores checkpoint)
+        # Checkpointing
         if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0:
-            specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
+            if args.use_torch_distributed_ckpt:
+                # For distributed checkpointing, use directories instead of files
+                specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}"
+            else:
+                specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
+                
             log_rank0(f"Saving checkpoint to {specific_ckpt_path}")
             checkpoint_store_start = time.perf_counter()
-            save_ckpt_vanilla(model,
-                              optimizer,
-                              lr_scheduler,
-                              train_sampler,
-                              train_step,
-                              epoch,
-                              specific_ckpt_path,
-                              max_keep=args.max_kept_checkpoints,
-                              verify=args.verify_checkpoints,
-                              is_distributed=(world_size > 1),
-                              rank=get_rank())
+            save_ckpt_fn(model,
+                         optimizer,
+                         lr_scheduler,
+                         train_sampler,
+                         train_step,
+                         epoch,
+                         specific_ckpt_path,
+                         max_keep=args.max_kept_checkpoints,
+                         verify=args.verify_checkpoints,
+                         is_distributed=(world_size > 1),
+                         rank=get_rank())
             checkpoint_store_time = time.perf_counter() - checkpoint_store_start
             log_rank0(f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds")
 

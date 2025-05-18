@@ -229,5 +229,11 @@ def get_args():
         default=3,
         help="Maximum number of checkpoints to keep."
     )
+    parser.add_argument(
+        "--use-torch-distributed-ckpt",
+        action="store_true",
+        help="Use torch.distributed.checkpoint for more efficient checkpoint saving/loading",
+    )
+
     args = parser.parse_args()
     return args
