@@ -255,11 +255,11 @@ def save_ckpt_distributed(
     
     # Save the checkpoint using distributed checkpoint
     dist_cp.save(
-        objects_to_save,
-        checkpoint_path,
-        planner=dist_cp.DefaultSavePlanner(),
+        state_dict=objects_to_save,
+        checkpoint_id=checkpoint_path,
         storage_writer=dist_cp.FileSystemWriter(checkpoint_path),
     )
+
     
     # Handle max_keep if needed - rank 0 only
     if rank == 0 and max_keep > 0:
@@ -333,11 +333,11 @@ def load_ckpt_distributed(
     
     # Load the distributed checkpoint
     dist_cp.load(
-        objects_to_load,
-        checkpoint_path,
-        planner=dist_cp.DefaultLoadPlanner(),
+        state_dict=objects_to_load,
+        checkpoint_id=checkpoint_path,
         storage_reader=dist_cp.FileSystemReader(checkpoint_path),
     )
+
     
     # Get epoch and step from loaded metadata
     epoch = objects_to_load["metadata"]["epoch"]
