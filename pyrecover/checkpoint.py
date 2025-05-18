@@ -181,11 +181,14 @@ def load_ckpt(
         for param in model.parameters():
             dist.broadcast(param.data, 0)
 
+        # Broadcast epoch and step (ensure 'cuda' device)
+        device = torch.device('cuda', torch.cuda.current_device())
+
         # Broadcast epoch and step
         if rank == 0:
-            epoch_step = torch.tensor([epoch, step], dtype=torch.long)
+            epoch_step = torch.tensor([epoch, step], dtype=torch.long, device=device)
         else:
-            epoch_step = torch.zeros(2, dtype=torch.long)
+            epoch_step = torch.zeros(2, dtype=torch.long, device=device)
         dist.broadcast(epoch_step, 0)
         if rank != 0:
             epoch, step = epoch_step.tolist()
