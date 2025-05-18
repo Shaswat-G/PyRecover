@@ -127,6 +127,10 @@ def load_ckpt(
         if checkpoint_path is None:
             raise RuntimeError(f"No checkpoint found in {experiment_dir}")
 
+    device = torch.device('cuda', torch.cuda.current_device())
+    assert model.device == device, "Model device does not match checkpoint device"
+    assert optimizer.state_dict()["param_groups"][0]["params"][0].device == device, "Optimizer device does not match checkpoint device"
+    assert lr_scheduler.state_dict()["optimizer"] == optimizer, "Optimizer device does not match checkpoint device"
     checkpoint = None
     checkpoint_keys = None
     if rank == 0:
@@ -142,7 +146,7 @@ def load_ckpt(
                 raise RuntimeError(f"Checksum mismatch for checkpoint {checkpoint_path}")
             print(f"Checksum verified for checkpoint {checkpoint_path}")
         # load checkpoint only rank 0
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
         checkpoint_keys = list(checkpoint.keys())
 
         # Load model state dictionary
@@ -182,8 +186,6 @@ def load_ckpt(
             dist.broadcast(param.data, 0)
 
         # Broadcast epoch and step (ensure 'cuda' device)
-        device = torch.device('cuda', torch.cuda.current_device())
-
         # Broadcast epoch and step
         if rank == 0:
             epoch_step = torch.tensor([epoch, step], dtype=torch.long, device=device)
