@@ -22,6 +22,21 @@ echo "[sbatch-master] MasterNodeID: $SLURM_NODEID"
 echo "Current path: $(pwd)"
 echo "Current user: $(whoami)"
 
+# Compute job end time in UNIX timestamp
+if [ -n "$SLURM_JOB_START_TIME" ]; then
+  # If SLURM_JOB_START_TIME is available (format: YYYY-MM-DDTHH:MM:SS)
+  start_epoch=$(date -d "$SLURM_JOB_START_TIME" +%s)
+else
+  # Fallback: use current time as start
+  start_epoch=$(date +%s)
+fi
+# SLURM_TIMELIMIT is in minutes, convert to seconds
+# Remove leading zeros to avoid octal interpretation
+SLURM_TIMELIMIT=$((10#$SLURM_TIMELIMIT))
+timelimit_sec=$((SLURM_TIMELIMIT * 60))
+export SLURM_JOB_END_TIME=$((start_epoch + timelimit_sec))
+echo "SLURM_JOB_END_TIME set to $SLURM_JOB_END_TIME"
+
 # Parse command line arguments
 DISTRIBUTED_FLAG=""
 EXPERIMENT_NAME="default_exp"
