@@ -1,4 +1,4 @@
-torch>=1.13.0
+torch>=2.0.0
 tqdm
 pyyaml
 pytest>=7.0.0

@@ -17,7 +17,7 @@ def is_distributed_activated() -> bool:
 
 
 def get_rank() -> int:
-    if is_distributed_slurm_env():
+    if is_distributed_slurm_env() and is_distributed_activated():
         import torch.distributed as dist
 
         return dist.get_rank()

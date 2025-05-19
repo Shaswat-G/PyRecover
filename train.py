@@ -1,11 +1,13 @@
 import time
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
-from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0
+from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0, \
+    is_distributed_activated
 from model import Transformer, TransformerModelArgs
 from utils import (
     build_lr_scheduler,
@@ -15,6 +17,12 @@ from utils import (
     init_logger,
     PRECISION_STR_TO_DTYPE,
     set_default_dtype,
+)
+from pyrecover.checkpoint import (
+    save_ckpt_vanilla, 
+    load_ckpt_vanilla,
+    save_ckpt_distributed,
+    load_ckpt_distributed
 )
 
 
@@ -105,9 +113,47 @@ def train(args):
     ntraining_tokens_since_last_log = 0
     time_last_log = time.perf_counter()
 
-    log_rank0("Starting training!")
+    # Setup checkpoint dir
+    checkpoint_freq_steps = int(args.checkpoint_frequency)
+    ckpt_path = Path(args.checkpoint_dir)
+    if ckpt_path.exists() and not ckpt_path.is_dir():
+        exit(f"Checkpoint dir {ckpt_path} exists as file already! Abort!")
+    exp_ckpt_path = ckpt_path / args.experiment_name
+    exp_ckpt_path.mkdir(parents=True, exist_ok=True)
+
+    # Select checkpoint save/load functions based on args
+    if args.use_torch_distributed_ckpt:
+        log_rank0("Using torch.distributed.checkpoint for checkpointing")
+        save_ckpt_fn = save_ckpt_distributed
+        load_ckpt_fn = load_ckpt_distributed
+    else:
+        log_rank0("Using vanilla PyTorch checkpointing")
+        save_ckpt_fn = save_ckpt_vanilla
+        load_ckpt_fn = load_ckpt_vanilla
+
+    # load checkpoint if wanted
     train_step = 0
     epoch = 1
+    if args.resume_from_checkpoint is not None:
+        log_rank0(f"Try resume from checkpoint {args.resume_from_checkpoint}")
+        # Measure checkpoint loading time
+        checkpoint_load_start = time.perf_counter()
+        epoch, train_step = load_ckpt_fn(model,
+                                         optimizer,
+                                         lr_scheduler,
+                                         train_sampler,
+                                         args.resume_from_checkpoint,
+                                         experiment_dir=exp_ckpt_path,
+                                         verify=args.verify_checkpoints,
+                                         is_distributed=(world_size > 1),
+                                         rank=get_rank())
+        checkpoint_load_time = time.perf_counter() - checkpoint_load_start
+        log_rank0(f"Checkpoint loading completed in {checkpoint_load_time:.2f} seconds")
+        
+    if is_distributed_activated():
+        torch.distributed.barrier()
+
+    log_rank0("Starting training!")
     while train_step < args.training_steps:
         train_step += 1
 
@@ -117,7 +163,7 @@ def train(args):
             torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
 
         if "train_sampler" in locals() and train_sampler is not None:
-            train_sampler.set_epoch(train_step) # set epoch?
+            train_sampler.set_epoch(epoch)
 
         # restart with next epoch if needed
         try:
@@ -143,6 +189,7 @@ def train(args):
         )
         loss = loss / num_items_in_batch
         del logits
+        # In ddp setting, gradients are synced here
         loss.backward()
 
         # Clip gradients
@@ -166,6 +213,30 @@ def train(args):
             ntokens_since_last_log = 0
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
+
+        # Checkpointing
+        if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0:
+            if args.use_torch_distributed_ckpt:
+                # For distributed checkpointing, use directories instead of files
+                specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}"
+            else:
+                specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
+                
+            log_rank0(f"Saving checkpoint to {specific_ckpt_path}")
+            checkpoint_store_start = time.perf_counter()
+            save_ckpt_fn(model,
+                         optimizer,
+                         lr_scheduler,
+                         train_sampler,
+                         train_step,
+                         epoch,
+                         specific_ckpt_path,
+                         max_keep=args.max_kept_checkpoints,
+                         verify=args.verify_checkpoints,
+                         is_distributed=(world_size > 1),
+                         rank=get_rank())
+            checkpoint_store_time = time.perf_counter() - checkpoint_store_start
+            log_rank0(f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds")
 
         # Profiling
         if args.profile and args.profile_step_end == train_step:

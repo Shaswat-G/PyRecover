@@ -194,5 +194,46 @@ def get_args():
         action='store_true',
         help="Set to run distributed training. In this case detects number of GPUs and Nodes and launches DDP"
     )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=str,
+        default="checkpoints/", # default local folder from run dir
+        help="Directory to save checkpoints to. Default: checkpoints/"
+    )
+    parser.add_argument(
+        "--checkpoint-frequency",
+        type=int,
+        default=10,
+        help="Save checkpoint every `--checkpoint-frequency` steps (training step not checkpoints). If set to -1 no checkpoints are created."
+    )
+    parser.add_argument(
+        "--resume-from-checkpoint",
+        type=str,
+        default=None,
+        help="Path to a checkpoint to resume training from. Default: None. Does not have to be subfolder of checkpoint dir. If set to 'latest', will resume from latest checkpoint in checkpoint dir."
+    )
+    parser.add_argument(
+        "--experiment_name",
+        type=str,
+        default="default-exp",
+        help="Name of the experiment. Used to create a subfolder in the checkpoint dir."
+    )
+    parser.add_argument(
+        "--verify-checkpoints",
+        action='store_true',
+        help="Verify checkpoints with checksums"
+    )
+    parser.add_argument(
+        "--max-kept-checkpoints",
+        type=int,
+        default=3,
+        help="Maximum number of checkpoints to keep."
+    )
+    parser.add_argument(
+        "--use-torch-distributed-ckpt",
+        action="store_true",
+        help="Use torch.distributed.checkpoint for more efficient checkpoint saving/loading",
+    )
+
     args = parser.parse_args()
     return args
