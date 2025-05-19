@@ -112,9 +112,6 @@ def get_args():
         help="Path to a parquet file containing a 'text' column with documents (`str`)",
     )
     parser.add_argument(
-        "--iterable_dset", "-id", action="store_true", help="Use IterableDataset"
-    )
-    parser.add_argument(
         "--tokenizer-name-or-path",
         type=str,
         default="unsloth/Mistral-Nemo-Base-2407-bnb-4bit",
@@ -245,6 +242,5 @@ def get_args():
         default=10.0,
         help="Default value for max_ckpt_time in seconds. Value used for early stop + checkpointing on approaching time-limit.",
     )
-
     args = parser.parse_args()
     return args
