@@ -63,6 +63,8 @@ TRAINING_STEPS=600
 LOGGING_FREQ=10
 CHECKPOINT_FREQ=150
 GLOBAL_BATCH_SIZE=8
+ITER_TIME=1
+CKPT_TIME=10
 
 # Benchmarking configurations
 echo "=== Starting Simple Training ==="
@@ -76,7 +78,7 @@ echo \"[srun] rank=\$SLURM_PROCID host=\$(hostname) noderank=\$SLURM_NODEID loca
 # Need to change directory again as bash -c starts from base dir
 cd /users/$USER/scratch/PyRecover
 # run the script
-python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG
+python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG
 "
 
 # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)

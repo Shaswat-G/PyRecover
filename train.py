@@ -6,8 +6,14 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
-from dist_utils import maybe_init_distributed, is_rank0, get_rank, maybe_cleanup_distributed, log_rank0, \
-    is_distributed_activated
+from dist_utils import (
+    maybe_init_distributed,
+    is_rank0,
+    get_rank,
+    maybe_cleanup_distributed,
+    log_rank0,
+    is_distributed_activated,
+)
 from model import Transformer, TransformerModelArgs
 from utils import (
     build_lr_scheduler,
@@ -19,10 +25,10 @@ from utils import (
     set_default_dtype,
 )
 from pyrecover.checkpoint import (
-    save_ckpt_vanilla, 
+    save_ckpt_vanilla,
     load_ckpt_vanilla,
     save_ckpt_distributed,
-    load_ckpt_distributed
+    load_ckpt_distributed,
 )
 
 
@@ -46,10 +52,13 @@ def train(args):
     # set batch size
     global_batch_size = int(args.batch_size)
     local_batch_size = max(global_batch_size // world_size, 1)
-    log_rank0(f"Global batch size: {global_batch_size}\nLocal batch size: {local_batch_size}")
+    log_rank0(
+        f"Global batch size: {global_batch_size}\nLocal batch size: {local_batch_size}"
+    )
     if world_size > 1:
         # Set Distributed Sampler for DDP training
         from torch.utils.data.distributed import DistributedSampler
+
         train_sampler = DistributedSampler(
             train_ds, num_replicas=world_size, rank=get_rank(), shuffle=True
         )
@@ -131,6 +140,14 @@ def train(args):
         save_ckpt_fn = save_ckpt_vanilla
         load_ckpt_fn = load_ckpt_vanilla
 
+    # Initialize max_iter_time and max_ckpt_time from args
+    max_iter_time = int(args.default_iter_time)
+    max_ckpt_time = int(args.default_ckpt_time)
+    buffer_time = 5 * max_iter_time + 1 * max_ckpt_time
+    log_rank0(
+        f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}"
+    )
+
     # load checkpoint if wanted
     train_step = 0
     epoch = 1
@@ -138,24 +155,28 @@ def train(args):
         log_rank0(f"Try resume from checkpoint {args.resume_from_checkpoint}")
         # Measure checkpoint loading time
         checkpoint_load_start = time.perf_counter()
-        epoch, train_step = load_ckpt_fn(model,
-                                         optimizer,
-                                         lr_scheduler,
-                                         train_sampler,
-                                         args.resume_from_checkpoint,
-                                         experiment_dir=exp_ckpt_path,
-                                         verify=args.verify_checkpoints,
-                                         is_distributed=(world_size > 1),
-                                         rank=get_rank())
+        epoch, train_step = load_ckpt_fn(
+            model,
+            optimizer,
+            lr_scheduler,
+            train_sampler,
+            args.resume_from_checkpoint,
+            experiment_dir=exp_ckpt_path,
+            verify=args.verify_checkpoints,
+            is_distributed=(world_size > 1),
+            rank=get_rank(),
+        )
         checkpoint_load_time = time.perf_counter() - checkpoint_load_start
         log_rank0(f"Checkpoint loading completed in {checkpoint_load_time:.2f} seconds")
-        
+
     if is_distributed_activated():
         torch.distributed.barrier()
 
     log_rank0("Starting training!")
     while train_step < args.training_steps:
         train_step += 1
+
+        iter_start = time.perf_counter()
 
         # Profiling
         if args.profile and args.profile_step_start == train_step:
@@ -208,11 +229,20 @@ def train(args):
             training_tps = ntraining_tokens_since_last_log / time_delta
 
             log_rank0(
-                    f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
-                )
+                f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
+            )
             ntokens_since_last_log = 0
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
+
+        # Track max_iter_time
+        iter_time = time.perf_counter() - iter_start
+        if iter_time > max_iter_time:
+            max_iter_time = iter_time
+            log_rank0(f"Updated max_iter_time: {max_iter_time}")
+        buffer_time = 5 * max_iter_time + 1 * max_ckpt_time
+        # Optionally log buffer_time for debugging
+        log_rank0(f"Current buffer_time: {buffer_time}")
 
         # Checkpointing
         if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0:
@@ -221,22 +251,29 @@ def train(args):
                 specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}"
             else:
                 specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}.pt"
-                
+
             log_rank0(f"Saving checkpoint to {specific_ckpt_path}")
             checkpoint_store_start = time.perf_counter()
-            save_ckpt_fn(model,
-                         optimizer,
-                         lr_scheduler,
-                         train_sampler,
-                         train_step,
-                         epoch,
-                         specific_ckpt_path,
-                         max_keep=args.max_kept_checkpoints,
-                         verify=args.verify_checkpoints,
-                         is_distributed=(world_size > 1),
-                         rank=get_rank())
+            save_ckpt_fn(
+                model,
+                optimizer,
+                lr_scheduler,
+                train_sampler,
+                train_step,
+                epoch,
+                specific_ckpt_path,
+                max_keep=args.max_kept_checkpoints,
+                verify=args.verify_checkpoints,
+                is_distributed=(world_size > 1),
+                rank=get_rank(),
+            )
             checkpoint_store_time = time.perf_counter() - checkpoint_store_start
-            log_rank0(f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds")
+            if checkpoint_store_time > max_ckpt_time:
+                max_ckpt_time = checkpoint_store_time
+                log_rank0(f"Updated max_ckpt_time: {max_ckpt_time}")
+            log_rank0(
+                f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds"
+            )
 
         # Profiling
         if args.profile and args.profile_step_end == train_step:
