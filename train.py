@@ -194,10 +194,6 @@ def train(args):
                     f"[TIME CHECK] Remaining time ({time_left:.2f}s) < threshold ({threshold_time:.2f}s). should_stop set to True."
                 )
 
-        if should_stop:
-            log_rank0("[TIME CHECK] Stopping training early and checkpointing due to time limit.")
-            break
-
         iter_start = time.perf_counter()
 
         # Profiling
@@ -296,6 +292,41 @@ def train(args):
             log_rank0(
                 f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds"
             )
+
+        # Synchronize should_stop across all ranks
+        if world_size > 1:
+            should_stop_tensor = torch.tensor([should_stop], device=device)
+            torch.distributed.broadcast(should_stop_tensor, src=0)
+            should_stop = bool(should_stop_tensor.item())
+
+        # Final checkpoint and graceful exit if should_stop
+        if should_stop:
+            if args.use_torch_distributed_ckpt:
+                specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}_final"
+            else:
+                specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}_final.pt"
+            log_rank0(
+                f"[TIME CHECK] Saving final checkpoint to {specific_ckpt_path} before exit."
+            )
+            checkpoint_store_start = time.perf_counter()
+            save_ckpt_fn(
+                model,
+                optimizer,
+                lr_scheduler,
+                train_sampler,
+                train_step,
+                epoch,
+                specific_ckpt_path,
+                max_keep=args.max_kept_checkpoints,
+                verify=args.verify_checkpoints,
+                is_distributed=(world_size > 1),
+                rank=get_rank(),
+            )
+            checkpoint_store_time = time.perf_counter() - checkpoint_store_start
+            log_rank0(
+                f"[TIME CHECK] Final checkpoint store completed in {checkpoint_store_time:.2f} seconds"
+            )
+            break
 
         # Profiling
         if args.profile and args.profile_step_end == train_step:
