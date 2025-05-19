@@ -24,8 +24,13 @@ echo "Current user: $(whoami)"
 
 # Compute job end time in UNIX timestamp
 if [ -n "$SLURM_JOB_START_TIME" ]; then
-  # If SLURM_JOB_START_TIME is available (format: YYYY-MM-DDTHH:MM:SS)
-  start_epoch=$(date -d "$SLURM_JOB_START_TIME" +%s)
+  # Check if SLURM_JOB_START_TIME is a number (UNIX timestamp)
+  if [[ "$SLURM_JOB_START_TIME" =~ ^[0-9]+$ ]]; then
+    start_epoch=$SLURM_JOB_START_TIME
+  else
+    # Assume it's a date string (format: YYYY-MM-DDTHH:MM:SS)
+    start_epoch=$(date -d "$SLURM_JOB_START_TIME" +%s)
+  fi
 else
   # Fallback: use current time as start
   start_epoch=$(date +%s)
