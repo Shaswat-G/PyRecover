@@ -262,7 +262,8 @@ def train(args):
             log_rank0(f"Updated max_iter_time: {max_iter_time}")
         buffer_time = 5 * max_iter_time + 1 * max_ckpt_time
         # Optionally log buffer_time for debugging
-        log_rank0(f"Current buffer_time: {buffer_time}")
+        if train_step % args.logging_frequency == 0:
+            log_rank0(f"Current buffer_time: {buffer_time}")
 
         # Checkpointing
         if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0:
