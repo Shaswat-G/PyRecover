@@ -141,8 +141,8 @@ def train(args):
         load_ckpt_fn = load_ckpt_vanilla
 
     # Initialize max_iter_time and max_ckpt_time from args
-    max_iter_time = int(args.default_iter_time)
-    max_ckpt_time = int(args.default_ckpt_time)
+    max_iter_time = float(args.default_iter_time)
+    max_ckpt_time = float(args.default_ckpt_time)
     buffer_time = 5 * max_iter_time + 1 * max_ckpt_time
     log_rank0(
         f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}"
