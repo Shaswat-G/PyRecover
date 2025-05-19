@@ -82,3 +82,13 @@ def log_rank(msg, rank):
 
 def log_rank0(msg):
     log_rank(msg, 0)
+
+def get_slurm_job_end_time_env() -> float:
+    """Return SLURM_JOB_END_TIME as a float (UNIX timestamp), or None if not set or invalid."""
+    val = os.environ.get("SLURM_JOB_END_TIME")
+    if val is not None:
+        try:
+            return float(val)
+        except ValueError:
+            pass
+    return None
