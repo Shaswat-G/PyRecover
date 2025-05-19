@@ -153,6 +153,8 @@ def train(args):
 
     # Read SLURM job end time from environment
     job_end_time = get_slurm_job_end_time_env()
+    if job_end_time is None:
+        log_rank0("Warning: SLURM_JOB_END_TIME is not set. Time-check logic will be skipped.")
     log_rank0(f"SLURM_JOB_END_TIME: {job_end_time}")
 
     # load checkpoint if wanted
