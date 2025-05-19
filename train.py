@@ -177,9 +177,26 @@ def train(args):
     if is_distributed_activated():
         torch.distributed.barrier()
 
+    should_stop = False  # Initialize the stop flag before the training loop
+
     log_rank0("Starting training!")
     while train_step < args.training_steps:
         train_step += 1
+
+        # Time checker at the beginning of the loop (rank0 only)
+        if is_rank0() and job_end_time is not None:
+            now = time.time()
+            time_left = job_end_time - now
+            threshold_time = max_iter_time + max_ckpt_time + buffer_time
+            if time_left < threshold_time:
+                should_stop = True
+                log_rank0(
+                    f"[TIME CHECK] Remaining time ({time_left:.2f}s) < threshold ({threshold_time:.2f}s). should_stop set to True."
+                )
+
+        if should_stop:
+            log_rank0("[TIME CHECK] Stopping training early and checkpointing due to time limit.")
+            break
 
         iter_start = time.perf_counter()
 
