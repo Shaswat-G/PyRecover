@@ -13,6 +13,7 @@ from dist_utils import (
     maybe_cleanup_distributed,
     log_rank0,
     is_distributed_activated,
+    get_slurm_job_end_time_env,  # import the helper
 )
 from model import Transformer, TransformerModelArgs
 from utils import (
@@ -147,6 +148,10 @@ def train(args):
     log_rank0(
         f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}"
     )
+
+    # Read SLURM job end time from environment
+    job_end_time = get_slurm_job_end_time_env()
+    log_rank0(f"SLURM_JOB_END_TIME: {job_end_time}")
 
     # load checkpoint if wanted
     train_step = 0
