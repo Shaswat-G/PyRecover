@@ -1,4 +1,5 @@
 import time
+import csv
 from pathlib import Path
 
 import torch
@@ -34,6 +35,13 @@ from pyrecover.checkpoint import (
 
 
 def train(args):
+    # Track total training time
+    training_start_time = time.perf_counter()
+
+    # Initialize checkpoint timing variables
+    total_checkpoint_store_time = 0
+    total_checkpoint_load_time = 0
+
     # Set up distributed training if activated and Slurm env set!
     local_rank, world_size = maybe_init_distributed(args.distributed)
     log_rank0(f"Experiment args: {args}")
@@ -131,6 +139,15 @@ def train(args):
     exp_ckpt_path = ckpt_path / args.experiment_name
     exp_ckpt_path.mkdir(parents=True, exist_ok=True)
 
+    # Set up loss CSV logging if enabled
+    csv_file = None
+    csv_writer = None
+    if args.log_loss_to_csv and is_rank0():
+        csv_path = exp_ckpt_path / f"{args.experiment_name}_loss_log.csv"
+        csv_file = open(csv_path, 'w', newline='')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(['Step', 'Loss'])
+
     # Select checkpoint save/load functions based on args
     if args.use_torch_distributed_ckpt:
         log_rank0("Using torch.distributed.checkpoint for checkpointing")
@@ -178,6 +195,7 @@ def train(args):
             rank=get_rank(),
         )
         checkpoint_load_time = time.perf_counter() - checkpoint_load_start
+        total_checkpoint_load_time += checkpoint_load_time
         log_rank0(f"Checkpoint loading completed in {checkpoint_load_time:.2f} seconds")
 
     if is_distributed_activated():
@@ -241,6 +259,10 @@ def train(args):
         optimizer.step()
         lr_scheduler.step()
 
+        # Log loss to CSV if enabled
+        if args.log_loss_to_csv and is_rank0() and csv_writer is not None:
+            csv_writer.writerow([train_step, loss.item()])
+
         # Logging
         if train_step == 1 or train_step % args.logging_frequency == 0:
             time_delta = time.perf_counter() - time_last_log
@@ -290,6 +312,7 @@ def train(args):
                 rank=get_rank(),
             )
             checkpoint_store_time = time.perf_counter() - checkpoint_store_start
+            total_checkpoint_store_time += checkpoint_store_time
             # Track max_ckpt_time only if timeaware_checkpointing is enabled
             if args.timeaware_checkpointing and checkpoint_store_time > max_ckpt_time:
                 max_ckpt_time = checkpoint_store_time
@@ -331,7 +354,19 @@ def train(args):
         if args.profile and args.profile_step_end == train_step:
             torch.cuda.cudart().cudaProfilerStop()
 
-    log_rank0("Training completed")
+    # Calculate total training time
+    total_training_time = time.perf_counter() - training_start_time
+
+    # Close CSV file if open
+    if csv_file is not None:
+        csv_file.close()
+
+    # Print training time information
+    log_rank0(f"Training completed in {total_training_time:.2f} seconds")
+    log_rank0(f"Total checkpoint loading time: {total_checkpoint_load_time:.2f} seconds")
+    log_rank0(f"Total checkpoint storing time: {total_checkpoint_store_time:.2f} seconds")
+    log_rank0(f"Total checkpointing time: {(total_checkpoint_load_time + total_checkpoint_store_time):.2f} seconds")
+
     maybe_cleanup_distributed()
 
 
