@@ -141,19 +141,23 @@ def train(args):
         save_ckpt_fn = save_ckpt_vanilla
         load_ckpt_fn = load_ckpt_vanilla
 
-    # Initialize max_iter_time and max_ckpt_time from args
-    max_iter_time = float(args.default_iter_time)
-    max_ckpt_time = float(args.default_ckpt_time)
-    ITERATION_BUFFER_MULTIPLIER = 10  # Multiplier for iteration time to account for buffer
-    CHECKPOINT_BUFFER_MULTIPLIER = 2  # Multiplier for checkpoint time to account for buffer
-    buffer_time = ITERATION_BUFFER_MULTIPLIER * max_iter_time + CHECKPOINT_BUFFER_MULTIPLIER * max_ckpt_time
-    log_rank0(f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}")
-
-    # Read SLURM job end time from environment
-    job_end_time = get_slurm_job_end_time_env()
-    if job_end_time is None:
-        log_rank0("Warning: SLURM_JOB_END_TIME is not set. Time-check logic will be skipped.")
-    log_rank0(f"SLURM_JOB_END_TIME: {job_end_time}")
+    # Time-aware checkpointing setup (only if enabled)
+    if args.timeaware_checkpointing:
+        max_iter_time = float(args.default_iter_time)
+        max_ckpt_time = float(args.default_ckpt_time)
+        ITERATION_BUFFER_MULTIPLIER = 10  # Multiplier for iteration time to account for buffer
+        CHECKPOINT_BUFFER_MULTIPLIER = 2  # Multiplier for checkpoint time to account for buffer
+        buffer_time = ITERATION_BUFFER_MULTIPLIER * max_iter_time + CHECKPOINT_BUFFER_MULTIPLIER * max_ckpt_time
+        log_rank0(f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}")
+        job_end_time = get_slurm_job_end_time_env()
+        if job_end_time is None:
+            log_rank0("Warning: SLURM_JOB_END_TIME is not set. Time-check logic will be skipped.")
+        log_rank0(f"SLURM_JOB_END_TIME: {job_end_time}")
+    else:
+        max_iter_time = None
+        max_ckpt_time = None
+        buffer_time = None
+        job_end_time = None
 
     # load checkpoint if wanted
     train_step = 0
@@ -185,8 +189,8 @@ def train(args):
     while train_step < args.training_steps:
         train_step += 1
 
-        # Time checker at the beginning of the loop (rank0 only)
-        if is_rank0() and job_end_time is not None:
+        # Time checker at the beginning of the loop (rank0 only, if enabled)
+        if args.timeaware_checkpointing and is_rank0() and job_end_time is not None:
             now = time.time()
             time_left = job_end_time - now
             threshold_time = max_iter_time + max_ckpt_time + buffer_time
@@ -251,15 +255,16 @@ def train(args):
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
 
-        # Track max_iter_time
-        iter_time = time.perf_counter() - iter_start
-        if iter_time > max_iter_time:
-            max_iter_time = iter_time
-            log_rank0(f"Updated max_iter_time: {max_iter_time}")
-        buffer_time = 5 * max_iter_time + 1 * max_ckpt_time
-        # Optionally log buffer_time for debugging
-        if train_step % args.logging_frequency == 0:
-            log_rank0(f"Current buffer_time: {buffer_time}")
+        # Track max_iter_time and buffer_time only if timeaware_checkpointing is enabled
+        if args.timeaware_checkpointing:
+            iter_time = time.perf_counter() - iter_start
+            if iter_time > max_iter_time:
+                max_iter_time = iter_time
+                log_rank0(f"Updated max_iter_time: {max_iter_time}")
+            buffer_time = 5 * max_iter_time + 1 * max_ckpt_time
+            # Optionally log buffer_time for debugging
+            if train_step % args.logging_frequency == 0:
+                log_rank0(f"Current buffer_time: {buffer_time}")
 
         # Checkpointing
         if checkpoint_freq_steps != -1 and train_step % checkpoint_freq_steps == 0:
@@ -285,7 +290,8 @@ def train(args):
                 rank=get_rank(),
             )
             checkpoint_store_time = time.perf_counter() - checkpoint_store_start
-            if checkpoint_store_time > max_ckpt_time:
+            # Track max_ckpt_time only if timeaware_checkpointing is enabled
+            if args.timeaware_checkpointing and checkpoint_store_time > max_ckpt_time:
                 max_ckpt_time = checkpoint_store_time
                 log_rank0(f"Updated max_ckpt_time: {max_ckpt_time}")
             log_rank0(f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds")
@@ -296,8 +302,8 @@ def train(args):
             torch.distributed.broadcast(should_stop_tensor, src=0)
             should_stop = bool(should_stop_tensor.item())
 
-        # Final checkpoint and graceful exit if should_stop
-        if should_stop:
+        # Final checkpoint and graceful exit if should_stop (only if timeaware_checkpointing is enabled)
+        if args.timeaware_checkpointing and should_stop:
             if args.use_torch_distributed_ckpt:
                 specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}_final"
             else:
