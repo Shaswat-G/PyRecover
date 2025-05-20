@@ -22,11 +22,32 @@ echo "[sbatch-master] MasterNodeID: $SLURM_NODEID"
 echo "Current path: $(pwd)"
 echo "Current user: $(whoami)"
 
+# Compute job end time in UNIX timestamp
+if [ -n "$SLURM_JOB_START_TIME" ]; then
+  # Check if SLURM_JOB_START_TIME is a number (UNIX timestamp)
+  if [[ "$SLURM_JOB_START_TIME" =~ ^[0-9]+$ ]]; then
+    start_epoch=$SLURM_JOB_START_TIME
+  else
+    # Assume it's a date string (format: YYYY-MM-DDTHH:MM:SS)
+    start_epoch=$(date -d "$SLURM_JOB_START_TIME" +%s)
+  fi
+else
+  # Fallback: use current time as start
+  start_epoch=$(date +%s)
+fi
+# SLURM_TIMELIMIT is in minutes, convert to seconds
+# Remove leading zeros to avoid octal interpretation
+SLURM_TIMELIMIT=$((10#$SLURM_TIMELIMIT))
+timelimit_sec=$((SLURM_TIMELIMIT * 60))
+export SLURM_JOB_END_TIME=$((start_epoch + timelimit_sec))
+echo "SLURM_JOB_END_TIME set to $SLURM_JOB_END_TIME"
+
 # Parse command line arguments
 DISTRIBUTED_FLAG=""
 EXPERIMENT_NAME="default_exp"
 RESUME_FLAG=""
 TORCH_DIST_CKPT_FLAG=""
+TIMEAWARE_CKPT_FLAG=""
 
 for arg in "$@"; do
   if [ "$arg" == "--distributed" ]; then
@@ -46,6 +67,10 @@ for arg in "$@"; do
     TORCH_DIST_CKPT_FLAG="--use-torch-distributed-ckpt"
     echo "Using torch.distributed.checkpoint for checkpointing!"
   fi
+  if [[ "$arg" == "--timeaware-checkpointing" ]]; then
+    TIMEAWARE_CKPT_FLAG="--timeaware-checkpointing"
+    echo "Time-aware checkpointing enabled!"
+  fi
 done
 
 # The defined environment vars will be shared with the other compute nodes.
@@ -63,6 +88,8 @@ TRAINING_STEPS=600
 LOGGING_FREQ=10
 CHECKPOINT_FREQ=150
 GLOBAL_BATCH_SIZE=8
+ITER_TIME=1
+CKPT_TIME=10
 
 # Benchmarking configurations
 echo "=== Starting Simple Training ==="
@@ -76,7 +103,7 @@ echo \"[srun] rank=\$SLURM_PROCID host=\$(hostname) noderank=\$SLURM_NODEID loca
 # Need to change directory again as bash -c starts from base dir
 cd /users/$USER/scratch/PyRecover
 # run the script
-python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG
+python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG
 "
 
 # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)

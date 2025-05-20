@@ -16,6 +16,7 @@ PRECISION_STR_TO_DTYPE = {
     "fp64": torch.float64,
 }
 
+
 def init_logger():
     logger.setLevel(logging.INFO)
     ch = logging.StreamHandler()
@@ -25,6 +26,7 @@ def init_logger():
     )
     ch.setFormatter(formatter)
     logger.addHandler(ch)
+
 
 def get_num_params(model: torch.nn.Module, exclude_embedding: bool = False) -> int:
     num_params = sum(p.numel() for p in model.parameters())
@@ -57,9 +59,7 @@ def get_num_flop_per_token(num_params: int, model_config) -> int:
 
 def build_lr_scheduler(optimizer: torch.optim, warmup_steps: int):
 
-    def linear_warmup_constant(
-        warmup_steps: int, current_step: int
-    ) -> float:
+    def linear_warmup_constant(warmup_steps: int, current_step: int) -> float:
         """Computes linear warmup followed by linear decay.
 
         Per LambdaLR requirement, this is accomplished by returning
@@ -80,13 +80,15 @@ def build_lr_scheduler(optimizer: torch.optim, warmup_steps: int):
 
     lr_lambda = functools.partial(linear_warmup_constant, warmup_steps)
     return LambdaLR(optimizer, lr_lambda)
-    
+
+
 @torch.no_grad()
 def clip_grad_norm_(parameters, grad_max_norm):
-  grads = [p.grad for p in parameters if p.grad is not None]
-  total_norm = torch.nn.utils.get_total_norm(grads, error_if_nonfinite=True)
-  torch.nn.utils.clip_grads_with_norm_(parameters, grad_max_norm, total_norm)
-  return total_norm
+    grads = [p.grad for p in parameters if p.grad is not None]
+    total_norm = torch.nn.utils.get_total_norm(grads, error_if_nonfinite=True)
+    torch.nn.utils.clip_grads_with_norm_(parameters, grad_max_norm, total_norm)
+    return total_norm
+
 
 @contextmanager
 def set_default_dtype(dtype: torch.dtype):
@@ -100,6 +102,7 @@ def set_default_dtype(dtype: torch.dtype):
     finally:
         torch.set_default_dtype(old_dtype)
 
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -108,11 +111,6 @@ def get_args():
         default="/capstor/store/cscs/ethz/large-sc/datasets/train_data.parquet",
         help="Path to a parquet file containing a 'text' column with documents (`str`)",
     )
-    parser.add_argument(
-        "--iterable_dset",
-        "-id",
-        action="store_true",
-        help="Use IterableDataset")
     parser.add_argument(
         "--tokenizer-name-or-path",
         type=str,
@@ -131,8 +129,8 @@ def get_args():
     )
     parser.add_argument(
         "--fused-optimizer",
-        action='store_true',
-        help="Set to fuse the optimizer for increased performance or not"
+        action="store_true",
+        help="Set to fuse the optimizer for increased performance or not",
     )
     parser.add_argument(
         "--learning-rate",
@@ -148,30 +146,28 @@ def get_args():
         "--training-steps",
         type=int,
         default=1000,
-        help="Number of training steps to run. That is not the number of epochs!"
+        help="Number of training steps to run. That is not the number of epochs!",
     )
     parser.add_argument(
         "--logging-frequency",
         type=int,
         default=5,
-        help="Log every `--logging-frequency` steps"
+        help="Log every `--logging-frequency` steps",
     )
     parser.add_argument(
-        "--profile",
-        action='store_true',
-        help="Profile the run using the NSYS profiler"
+        "--profile", action="store_true", help="Profile the run using the NSYS profiler"
     )
     parser.add_argument(
         "--profile-step-start",
         type=int,
         default=10,
-        help="Starting step to profile using the NSYS profiler"
+        help="Starting step to profile using the NSYS profiler",
     )
     parser.add_argument(
         "--profile-step-end",
         type=int,
         default=12,
-        help="Last step to profile using the NSYS profiler"
+        help="Last step to profile using the NSYS profiler",
     )
     parser.add_argument(
         "--grad-max-norm",
@@ -186,54 +182,70 @@ def get_args():
     )
     parser.add_argument(
         "--compile",
-        action='store_true',
-        help="Set to compile the model with `torch.compile`"
+        action="store_true",
+        help="Set to compile the model with `torch.compile`",
     )
     parser.add_argument(
         "--distributed",
-        action='store_true',
-        help="Set to run distributed training. In this case detects number of GPUs and Nodes and launches DDP"
+        action="store_true",
+        help="Set to run distributed training. In this case detects number of GPUs and Nodes and launches DDP",
     )
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
-        default="checkpoints/", # default local folder from run dir
-        help="Directory to save checkpoints to. Default: checkpoints/"
+        default="checkpoints/",  # default local folder from run dir
+        help="Directory to save checkpoints to. Default: checkpoints/",
     )
     parser.add_argument(
         "--checkpoint-frequency",
         type=int,
         default=10,
-        help="Save checkpoint every `--checkpoint-frequency` steps (training step not checkpoints). If set to -1 no checkpoints are created."
+        help="Save checkpoint every `--checkpoint-frequency` steps (training step not checkpoints). If set to -1 no checkpoints are created.",
     )
     parser.add_argument(
         "--resume-from-checkpoint",
         type=str,
         default=None,
-        help="Path to a checkpoint to resume training from. Default: None. Does not have to be subfolder of checkpoint dir. If set to 'latest', will resume from latest checkpoint in checkpoint dir."
+        help="Path to a checkpoint to resume training from. Default: None. Does not have to be subfolder of checkpoint dir. If set to 'latest', will resume from latest checkpoint in checkpoint dir.",
     )
     parser.add_argument(
         "--experiment_name",
         type=str,
         default="default-exp",
-        help="Name of the experiment. Used to create a subfolder in the checkpoint dir."
+        help="Name of the experiment. Used to create a subfolder in the checkpoint dir.",
     )
     parser.add_argument(
         "--verify-checkpoints",
-        action='store_true',
-        help="Verify checkpoints with checksums"
+        action="store_true",
+        help="Verify checkpoints with checksums",
     )
     parser.add_argument(
         "--max-kept-checkpoints",
         type=int,
         default=3,
-        help="Maximum number of checkpoints to keep."
+        help="Maximum number of checkpoints to keep.",
     )
     parser.add_argument(
         "--use-torch-distributed-ckpt",
         action="store_true",
         help="Use torch.distributed.checkpoint for more efficient checkpoint saving/loading",
     )
-
+    parser.add_argument(
+        "--default-iter-time",
+        type=float,
+        default=1.0,
+        help="Default value for max_iter_time in seconds. Only used if --timeaware-checkpointing is enabled.",
+    )
+    parser.add_argument(
+        "--default-ckpt-time",
+        type=float,
+        default=10.0,
+        help="Default value for max_ckpt_time in seconds. Only used if --timeaware-checkpointing is enabled.",
+    )
+    parser.add_argument(
+        "--timeaware-checkpointing",
+        action="store_true",
+        help="Enable time-aware checkpointing and early stopping based on SLURM walltime.",
+    )
     args = parser.parse_args()
     return args
