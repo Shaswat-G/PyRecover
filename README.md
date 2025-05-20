@@ -52,10 +52,15 @@ To install with Flash Attention support, ensure you have the following prerequis
 
 Then install with:
 ```
+./setup_flashattention.sh
+```
+or
+```
 pip install ".[flash-attention]"
 ```
 
-After this you can activate flash attention.
+After this you can activate flash attention as argument. The isntalletion can take un to 2h.
+In the slurm script flash attention is attempted to be installed if its activated. This is to make slurm runs as stateless as possible without needing this installation in a container or environment before.
 
 ## Training
 
@@ -63,7 +68,7 @@ The codebase contains example code for training a Transformer model on a parquet
 
 ### Command Line Arguments
 
-The training script () accepts various arguments to customize the training process. Here are the key parameters: `train.py`
+The training script (`train.py`) accepts various arguments to customize the training process. Here are the key parameters:
 
 | Argument                       | Description                                   | Default                                                         |
 |--------------------------------|-----------------------------------------------|-----------------------------------------------------------------|
@@ -81,6 +86,7 @@ The training script () accepts various arguments to customize the training proce
 | `--use-torch-distributed-ckpt` | Use distributed checkpointing                 | False                                                           |
 | `--compile`                    | Compile model with torch.compile              | False                                                           |
 | `--fused-optimizer`            | Use fused optimizer                           | False                                                           |
+| `--use_flash_attention`        | Use flash-attention in the model              | False                                                           |
 
 For a complete list of arguments, run:
 
@@ -114,6 +120,7 @@ The submission script supports the following arguments:
 | `--exp_name=NAME`              | Set experiment name (affects checkpoint subfolder) |
 | `--continue`                   | Resume from latest checkpoint                      |
 | `--use_torch_distributed_ckpt` | Use torch distributed checkpointing                |
+| `--use_flash_attention`        | Use and install flash-attention in the model       |
 
 #### Time-Aware Job Management
 

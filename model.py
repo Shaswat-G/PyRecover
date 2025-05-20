@@ -18,7 +18,9 @@ class TransformerModelArgs:
     norm_type: str = "rmsnorm"
     seq_len: int = 2048 # defined later by config
     vocab_size: int = -1  # defined later by tokenizer
+    use_flash_attention: bool = False
     
+
 class RMSNorm(nn.Module):
     """
     Initialize the RMSNorm normalization layer.
@@ -171,6 +173,12 @@ class Attention(nn.Module):
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
+        if model_args.use_flash_attention:
+            from flash_attn.flash_attn_interface import flash_attn_func
+            self.attn_func=lambda *args, **kwargs: flash_attn_func(*args, **kwargs)[0]
+
+        else:
+            self.attn_func=F.scaled_dot_product_attention
 
     def forward(
         self,
@@ -205,7 +213,7 @@ class Attention(nn.Module):
         xv = values.transpose(1, 2)
 
         # we use casual mask for training
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
+        output = self.attn_func(xq, xk, xv, is_causal=True)
         output = output.transpose(
             1, 2
         ).contiguous()

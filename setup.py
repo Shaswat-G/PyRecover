@@ -1,28 +1,23 @@
 import os
 import subprocess
 import sys
-from setuptools import setup, find_packages, Command
+from setuptools import setup, find_packages
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 
 
 def install_flash_attention():
-    """Install flash attention by building cuda kernels"""
-    flash_attention_repo = "flash-attention"
-    # Clone the repository
-    subprocess.check_call(
-        ["git", "clone", "https://github.com/Dao-AILab/flash-attention.git"]
-    )
-    # First install hopper
-    hopper_dir = os.path.join(flash_attention_repo, "hopper")
-    if os.path.exists(hopper_dir):
-        subprocess.check_call([sys.executable, "setup.py", "install"], cwd=hopper_dir)
-    # Clean up
-    subprocess.check_call(["rm", "-rf", flash_attention_repo])
+    """Execute the setup_flash_attention.sh script to install flash attention."""
+    script_name = "setup_flash_attention.sh"
+    if not os.path.isfile(script_name):
+        raise FileNotFoundError(f"Script '{script_name}' not found in the repository root.")
+    
+    # Run the script
+    subprocess.check_call(["bash", script_name])
 
 
 class InstallCommand(install):
-    """Custom install command to build flash attention"""
+    """Custom install command to build flash attention."""
     def run(self):
         if any('flash-attention' in arg for arg in sys.argv):
             install_flash_attention()
@@ -30,7 +25,7 @@ class InstallCommand(install):
 
 
 class DevelopCommand(develop):
-    """Custom install command to build flash attention"""
+    """Custom develop command to build flash attention."""
     def run(self):
         if any('flash-attention' in arg for arg in sys.argv):
             install_flash_attention()
@@ -49,7 +44,6 @@ setup(
         "pyyaml",
     ],
     extras_require={
-        'flash-attention': ['flash-attention @ git+https://github.com/Dao-AILab/flash-attention.git'],
         'dev': [
             'pytest',
             'pytest-cov',
