@@ -43,6 +43,20 @@ Use this environment for development. Activate it by calling:
 conda activate pyrecover
 ```
 
+#### Installation with Flash Attention
+
+To install with Flash Attention support, ensure you have the following prerequisites:
+- CUDA toolkit (compatible with your PyTorch installation)
+- C++ compiler (gcc/g++)
+- Python development headers
+
+Then install with:
+```
+pip install ".[flash-attention]"
+```
+
+After this you can activate flash attention.
+
 ## Training
 
 The codebase contains example code for training a Transformer model on a parquet dataset. It's designed to work with SLURM, automatically detecting when multiple GPUs are available and enabling distributed training via DDP (DistributedDataParallel).
