@@ -147,9 +147,7 @@ def train(args):
     ITERATION_BUFFER_MULTIPLIER = 10  # Multiplier for iteration time to account for buffer
     CHECKPOINT_BUFFER_MULTIPLIER = 2  # Multiplier for checkpoint time to account for buffer
     buffer_time = ITERATION_BUFFER_MULTIPLIER * max_iter_time + CHECKPOINT_BUFFER_MULTIPLIER * max_ckpt_time
-    log_rank0(
-        f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}"
-    )
+    log_rank0(f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}")
 
     # Read SLURM job end time from environment
     job_end_time = get_slurm_job_end_time_env()
@@ -194,9 +192,7 @@ def train(args):
             threshold_time = max_iter_time + max_ckpt_time + buffer_time
             if time_left < threshold_time:
                 should_stop = True
-                log_rank0(
-                    f"[TIME CHECK] Remaining time ({time_left:.2f}s) < threshold ({threshold_time:.2f}s). should_stop set to True."
-                )
+                log_rank0(f"[TIME CHECK] Remaining time ({time_left:.2f}s) < threshold ({threshold_time:.2f}s). should_stop set to True.")
 
         iter_start = time.perf_counter()
 
@@ -250,9 +246,7 @@ def train(args):
             tflops = num_flop_per_token * tps / 1e12
             training_tps = ntraining_tokens_since_last_log / time_delta
 
-            log_rank0(
-                f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
-            )
+            log_rank0(f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}")
             ntokens_since_last_log = 0
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
@@ -294,9 +288,7 @@ def train(args):
             if checkpoint_store_time > max_ckpt_time:
                 max_ckpt_time = checkpoint_store_time
                 log_rank0(f"Updated max_ckpt_time: {max_ckpt_time}")
-            log_rank0(
-                f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds"
-            )
+            log_rank0(f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds")
 
         # Synchronize should_stop across all ranks
         if world_size > 1:
@@ -310,9 +302,7 @@ def train(args):
                 specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}_final"
             else:
                 specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}_final.pt"
-            log_rank0(
-                f"[TIME CHECK] Saving final checkpoint to {specific_ckpt_path} before exit."
-            )
+            log_rank0(f"[TIME CHECK] Saving final checkpoint to {specific_ckpt_path} before exit.")
             checkpoint_store_start = time.perf_counter()
             save_ckpt_fn(
                 model,
@@ -328,9 +318,7 @@ def train(args):
                 rank=get_rank(),
             )
             checkpoint_store_time = time.perf_counter() - checkpoint_store_start
-            log_rank0(
-                f"[TIME CHECK] Final checkpoint store completed in {checkpoint_store_time:.2f} seconds"
-            )
+            log_rank0(f"[TIME CHECK] Final checkpoint store completed in {checkpoint_store_time:.2f} seconds")
             break
 
         # Profiling
