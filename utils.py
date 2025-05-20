@@ -234,13 +234,18 @@ def get_args():
         "--default-iter-time",
         type=float,
         default=1.0,
-        help="Default value for max_iter_time in seconds. Value used for early stop + checkpointing on approaching time-limit.",
+        help="Default value for max_iter_time in seconds. Only used if --timeaware-checkpointing is enabled.",
     )
     parser.add_argument(
         "--default-ckpt-time",
         type=float,
         default=10.0,
-        help="Default value for max_ckpt_time in seconds. Value used for early stop + checkpointing on approaching time-limit.",
+        help="Default value for max_ckpt_time in seconds. Only used if --timeaware-checkpointing is enabled.",
+    )
+    parser.add_argument(
+        "--timeaware-checkpointing",
+        action="store_true",
+        help="Enable time-aware checkpointing and early stopping based on SLURM walltime.",
     )
     args = parser.parse_args()
     return args
