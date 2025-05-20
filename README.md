@@ -3,18 +3,28 @@
 PyRecover is a robust distributed checkpointing and job management system for multi-GPU SLURM workloads. The project offers efficient training with time-aware checkpointing to maximize cluster utilization.
 
 ## Table of Contents
-- [Environment Setup](#environment-setup)
-- [Training](#training)
-  - [Command Line Arguments](#command-line-arguments)
-  - [SLURM Submission Script](#slurm-submission-script)
-- [Checkpointing](#checkpointing)
-- [Distributed Training](#distributed-training)
+- [PyRecover](#pyrecover)
+  - [Table of Contents](#table-of-contents)
+  - [Environment Setup](#environment-setup)
+    - [Prerequisites](#prerequisites)
+    - [Installation](#installation)
+  - [Training](#training)
+    - [Command Line Arguments](#command-line-arguments)
+    - [SLURM Submission Script](#slurm-submission-script)
+      - [Key Parameters](#key-parameters)
+      - [Script Arguments](#script-arguments)
+      - [Time-Aware Job Management](#time-aware-job-management)
+      - [Example Usage](#example-usage)
+  - [Checkpointing](#checkpointing)
+  - [Time-Aware Checkpointing](#time-aware-checkpointing)
+  - [Distributed Training](#distributed-training)
 
 ## Environment Setup
 
 Shows environment creation with conda, but principally also other tools such as venv can be used.
 
 ### Prerequisites
+
 - Miniconda or Anaconda
 
 ### Installation
@@ -34,8 +44,11 @@ conda activate pyrecover
 ```
 
 ## Training
+
 The codebase contains example code for training a Transformer model on a parquet dataset. It's designed to work with SLURM, automatically detecting when multiple GPUs are available and enabling distributed training via DDP (DistributedDataParallel).
+
 ### Command Line Arguments
+
 The training script () accepts various arguments to customize the training process. Here are the key parameters: `train.py`
 
 | Argument                       | Description                                   | Default                                                         |
@@ -56,13 +69,17 @@ The training script () accepts various arguments to customize the training proce
 | `--fused-optimizer`            | Use fused optimizer                           | False                                                           |
 
 For a complete list of arguments, run:
+
 ```bash
 python train.py --help
 ```
 
 ### SLURM Submission Script
+
 The script is provided for launching training jobs on SLURM clusters. `submit-training-simple.sh`
+
 #### Key Parameters
+
 These key parameters can be adapted by editing the script.
 
 | SLURM Parameter     | Description                          |
@@ -72,7 +89,9 @@ These key parameters can be adapted by editing the script.
 | `--gpus-per-node`   | GPUs to use per node                 |
 | `--time`            | Time limit for the job               |
 | `--partition`       | SLURM partition to use               |
+
 #### Script Arguments
+
 The submission script supports the following arguments:
 
 | Argument                       | Description                                        |
@@ -83,10 +102,12 @@ The submission script supports the following arguments:
 | `--use_torch_distributed_ckpt` | Use torch distributed checkpointing                |
 
 #### Time-Aware Job Management
+
 The script automatically computes the job end time based on the SLURM time limit and makes it available to the training script. This enables graceful stopping and checkpointing as the job approaches its time limit.
 
 #### Example Usage
-``` bash
+
+```bash
 # Non-distributed training
 sbatch submit-training-simple.sh --exp_name=my_experiment
 
@@ -99,25 +120,49 @@ sbatch submit-training-simple.sh --distributed --continue --use_torch_distribute
 
 
 ## Checkpointing
+
 PyRecover offers two checkpointing methods:
+
 1. **Vanilla Checkpointing**: Standard PyTorch checkpointing (default)
-    - Use with standard submission script without flags
+
+   - Use with standard submission script without flags
 
 2. **Distributed Checkpointing**: Faster loading/saving for large models (45+ GB)
-    - Enable with flag `--use_torch_distributed_ckpt`
+   - Enable with flag `--use_torch_distributed_ckpt`
 
 Checkpoints are automatically organized by experiment name, allowing you to run multiple experiments without overwriting previous results.
+
+## Time-Aware Checkpointing
+
+Time-aware checkpointing enables the training script to monitor the remaining SLURM job time and automatically trigger a final checkpoint and graceful exit before the job ends. This prevents loss of training progress due to walltime limits.
+
+- Activate by adding the `--timeaware-checkpointing` flag to your training command or SLURM script.
+- The script dynamically tracks iteration and checkpoint durations to calculate a safe stopping threshold.
+- As the job nears its end, a final checkpoint is saved and the process exits cleanly, allowing seamless resumption.
+
+**Example usage:**
+
+```bash
+sbatch submit-training-simple.sh --distributed --timeaware-checkpointing
+```
+
 ## Distributed Training
+
 For distributed training across multiple GPUs and nodes:
+
 1. Set SLURM parameters in the submission script:
-    - (for 4 GPUs per node) `--ntasks-per-node=4`
-    - `--nodes=X` (where X is the number of nodes)
+
+   - (for 4 GPUs per node) `--ntasks-per-node=4`
+   - `--nodes=X` (where X is the number of nodes)
 
 2. Launch with the distributed flag:
-``` bash
+
+```bash
    sbatch submit-training-simple.sh --distributed
 ```
+
 This will automatically:
+
 - Initialize process groups
 - Set up data parallelism with DistributedDataParallel
 - Configure distributed samplers for the dataset
