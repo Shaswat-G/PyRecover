@@ -1,0 +1,192 @@
+experiments:
+  # Type 1: Baseline (Non-distributed)
+  - experiment_number: 1
+    experiment_name: "baseline_no_ckpt"
+    distributed: false
+    checkpoint_frequency: null
+    use_torch_distributed_ckpt: false
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/baseline_no_ckpt_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/baseline_no_ckpt_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/baseline_no_ckpt_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/baseline_no_ckpt_%j.err"
+    num_nodes: 1
+    num_tasks_per_node: 1
+    num_gpus_per_node: 1
+
+  # Type 1: Baseline (Distributed)
+  - experiment_number: 1.1
+    experiment_name: "baseline_dist_no_ckpt"
+    distributed: true
+    checkpoint_frequency: null
+    use_torch_distributed_ckpt: true
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/baseline_dist_no_ckpt_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/baseline_dist_no_ckpt_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/baseline_dist_no_ckpt_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/baseline_dist_no_ckpt_%j.err"
+    num_nodes: 4
+    num_tasks_per_node: 4
+    num_gpus_per_node: 4
+
+  # Type 2: Vanilla checkpointing (frequencies 250/500/1000)
+  - experiment_number: 2
+    experiment_name: "vanilla_ckpt_freq250"
+    distributed: false
+    checkpoint_frequency: 250
+    use_torch_distributed_ckpt: false
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq250_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq250_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq250_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq250_%j.err"
+    num_nodes: 1
+    num_tasks_per_node: 1
+    num_gpus_per_node: 1
+
+  - experiment_number: 3
+    experiment_name: "vanilla_ckpt_freq500"
+    distributed: false
+    checkpoint_frequency: 500
+    use_torch_distributed_ckpt: false
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq500_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq500_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq500_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq500_%j.err"
+    num_nodes: 1
+    num_tasks_per_node: 1
+    num_gpus_per_node: 1
+
+  - experiment_number: 4
+    experiment_name: "vanilla_ckpt_freq1000"
+    distributed: false
+    checkpoint_frequency: 1000
+    use_torch_distributed_ckpt: false
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq1000_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq1000_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq1000_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/vanilla_ckpt_freq1000_%j.err"
+    num_nodes: 1
+    num_tasks_per_node: 1
+    num_gpus_per_node: 1
+
+  # Type 2: Distributed checkpointing (frequencies 250/500/1000)
+  - experiment_number: 5
+    experiment_name: "dist_ckpt_freq250"
+    distributed: true
+    checkpoint_frequency: 250
+    use_torch_distributed_ckpt: true
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq250_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq250_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq250_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq250_%j.err"
+    num_nodes: 4
+    num_tasks_per_node: 4
+    num_gpus_per_node: 4
+
+  - experiment_number: 6
+    experiment_name: "dist_ckpt_freq500"
+    distributed: true
+    checkpoint_frequency: 500
+    use_torch_distributed_ckpt: true
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq500_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq500_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq500_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq500_%j.err"
+    num_nodes: 4
+    num_tasks_per_node: 4
+    num_gpus_per_node: 4
+
+  - experiment_number: 7
+    experiment_name: "dist_ckpt_freq1000"
+    distributed: true
+    checkpoint_frequency: 1000
+    use_torch_distributed_ckpt: true
+    log_loss_to_csv: true
+    timeaware_checkpointing: false
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq1000_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq1000_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq1000_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/dist_ckpt_freq1000_%j.err"
+    num_nodes: 4
+    num_tasks_per_node: 4
+    num_gpus_per_node: 4
+
+  # Type 3: Time-aware distributed checkpointing (freq 500, times 2h/40m/20m)
+  - experiment_number: 8
+    experiment_name: "timeaware_dist_ckpt_2h"
+    distributed: true
+    checkpoint_frequency: 500
+    use_torch_distributed_ckpt: true
+    log_loss_to_csv: true
+    timeaware_checkpointing: true
+    training_steps: 5000
+    time: "02:00:00"
+    output: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_2h_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_2h_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_2h_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_2h_%j.err"
+    num_nodes: 4
+    num_tasks_per_node: 4
+    num_gpus_per_node: 4
+
+  - experiment_number: 9
+    experiment_name: "timeaware_dist_ckpt_40m"
+    distributed: true
+    checkpoint_frequency: 500
+    use_torch_distributed_ckpt: true
+    log_loss_to_csv: true
+    timeaware_checkpointing: true
+    training_steps: 5000
+    time: "00:40:00"
+    output: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_40m_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_40m_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_40m_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_40m_%j.err"
+    num_nodes: 4
+    num_tasks_per_node: 4
+    num_gpus_per_node: 4
+
+  - experiment_number: 10
+    experiment_name: "timeaware_dist_ckpt_20m"
+    distributed: true
+    checkpoint_frequency: 500
+    use_torch_distributed_ckpt: true
+    log_loss_to_csv: true
+    timeaware_checkpointing: true
+    training_steps: 5000
+    time: "00:20:00"
+    output: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_20m_%j.out"
+    error: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_20m_%j.err"
+    out: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_20m_%j.out"
+    err: "/iopsstor/scratch/cscs/%u/timeaware_dist_ckpt_20m_%j.err"
+    num_nodes: 4
+    num_tasks_per_node: 4
+    num_gpus_per_node: 4
