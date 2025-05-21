@@ -173,10 +173,13 @@ class Attention(nn.Module):
         self.wo = nn.Linear(
             model_args.n_heads * self.head_dim, model_args.dim, bias=False
         )
-        if model_args.use_flash_attention:
+        self.use_flash_attention = model_args.use_flash_attention
+        if self.use_flash_attention:
             from flash_attn.flash_attn_interface import flash_attn_func
-            self.attn_func=lambda *args, **kwargs: flash_attn_func(*args, **kwargs)[0]
-
+            self.attn_func=lambda *args, **kwargs: (
+                kwargs.update(causal=kwargs.pop("is_causal")) if "is_causal" in kwargs else None,
+                flash_attn_func(*args, **kwargs)[0]
+            )[-1]
         else:
             self.attn_func=F.scaled_dot_product_attention
 

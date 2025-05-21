@@ -26,7 +26,7 @@ echo "Current user: $(whoami)"
 cd /users/$(whoami)/scratch/PyRecover
 echo "cd to: $(pwd)"
 
-# Compute job end time in UNIX timestamp
+# Compute job end time in UNIX timestamp (FOR TIME-AWARE-CHECKPPOINTING)
 if [ -n "$SLURM_JOB_START_TIME" ]; then
   # Check if SLURM_JOB_START_TIME is a number (UNIX timestamp)
   if [[ "$SLURM_JOB_START_TIME" =~ ^[0-9]+$ ]]; then
@@ -44,7 +44,7 @@ fi
 SLURM_TIMELIMIT=$((10#$SLURM_TIMELIMIT))
 timelimit_sec=$((SLURM_TIMELIMIT * 60))
 export SLURM_JOB_END_TIME=$((start_epoch + timelimit_sec))
-echo "SLURM_JOB_END_TIME set to $SLURM_JOB_END_TIME"
+echo "(FOR TIME-AWARE-CHECKPPOINTING) SLURM_JOB_END_TIME set to $SLURM_JOB_END_TIME"
 
 # Parse command line arguments
 DISTRIBUTED_FLAG=""
@@ -93,7 +93,7 @@ echo "[sbatch-master] execute command on compute nodes"
 # Set common parameters
 TRAINING_STEPS=600
 LOGGING_FREQ=10
-CHECKPOINT_FREQ=150
+CHECKPOINT_FREQ=-1
 GLOBAL_BATCH_SIZE=8
 ITER_TIME=1
 CKPT_TIME=10
