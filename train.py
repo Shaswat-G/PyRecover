@@ -147,6 +147,7 @@ def train(args):
         csv_file = open(csv_path, 'w', newline='')
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(['Step', 'Loss'])
+        csv_file.flush()
 
     # Select checkpoint save/load functions based on args
     if args.use_torch_distributed_ckpt:
@@ -262,6 +263,7 @@ def train(args):
         # Log loss to CSV if enabled
         if args.log_loss_to_csv and is_rank0() and csv_writer is not None:
             csv_writer.writerow([train_step, loss.item()])
+            csv_file.flush()
 
         # Logging
         if train_step == 1 or train_step % args.logging_frequency == 0:

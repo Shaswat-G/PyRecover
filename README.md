@@ -107,6 +107,7 @@ The submission script supports the following arguments:
 | `--exp_name=NAME`              | Set experiment name (affects checkpoint subfolder) |
 | `--continue`                   | Resume from latest checkpoint                      |
 | `--use_torch_distributed_ckpt` | Use torch distributed checkpointing                |
+| `--log-loss-to-csv`            | Log the loss of the training to a csv file         |
 
 #### Time-Aware Job Management
 
