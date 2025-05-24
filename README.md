@@ -66,6 +66,7 @@ In the slurm script flash attention is attempted to be installed if its activate
 
 The codebase contains example code for training a Transformer model on a parquet dataset. It's designed to work with SLURM, automatically detecting when multiple GPUs are available and enabling distributed training via DDP (DistributedDataParallel).
 
+
 ### Command Line Arguments
 
 The training script (`train.py`) accepts various arguments to customize the training process. Here are the key parameters:
@@ -87,8 +88,20 @@ The training script (`train.py`) accepts various arguments to customize the trai
 | `--compile`                    | Compile model with torch.compile              | False                                                           |
 | `--fused-optimizer`            | Use fused optimizer                           | False                                                           |
 | `--use_flash_attention`        | Use flash-attention in the model              | False                                                           |
+| `--log-loss-to-csv`            | Log loss to a csv for plots/comparison        | False                                                           |
 
 For a complete list of arguments, run:
+```bash
+python train.py --help
+```
+
+### Command Line Arguments
+
+The training script accepts various arguments to customize the training process. Here are the key parameters: `train.py`
+
+### Running non distributes training
+
+Make sure to set `#SBATCH --ntasks-per-node=1` this way only one process is spawned on a node. The code uses DDP and one process will only make use of one gpu.
 
 ```bash
 python train.py --help
@@ -121,6 +134,7 @@ The submission script supports the following arguments:
 | `--continue`                   | Resume from latest checkpoint                      |
 | `--use_torch_distributed_ckpt` | Use torch distributed checkpointing                |
 | `--use_flash_attention`        | Use and install flash-attention in the model       |
+| `--log-loss-to-csv`            | Log the loss of the training to a csv file         |
 
 #### Time-Aware Job Management
 
@@ -138,7 +152,6 @@ sbatch submit-training-simple.sh --distributed --exp_name=distributed_exp
 # Resume from checkpoint with distributed checkpointing
 sbatch submit-training-simple.sh --distributed --continue --use_torch_distributed_ckpt
 ```
-
 
 ## Checkpointing
 
@@ -181,9 +194,33 @@ For distributed training across multiple GPUs and nodes:
 ```bash
    sbatch submit-training-simple.sh --distributed
 ```
-
 This will automatically:
-
 - Initialize process groups
 - Set up data parallelism with DistributedDataParallel
 - Configure distributed samplers for the dataset
+
+## Benchmarks
+
+To test the checkpointing we employ different benchmark possibilities. This is either enabled by separate scripts or by setting cmd args.
+For some it is even enough to look at the output.
+
+### Check equality of weights
+With and without checkpointing or continue from checkpoint we can reach two final checkpoints.
+Make sure training is done with same hyperparams and training-args and use the same fixed seed.
+Then use the script `tests/check_weights_equality.py` and give the path to two checkpoints as arguments.
+
+#### Usage
+``` bash
+python check_weights_equality.py <checkpoint1> <checkpoint2> [--distributed] [--tolerance 1e-7] [--verbose]
+```
+
+#### Arguments
+- `checkpoint1`: Path to the first checkpoint
+- `checkpoint2`: Path to the second checkpoint
+- : Use this flag if the checkpoints were saved using distributed checkpointing `--distributed`
+- `--tolerance`: Floating point tolerance for comparison (default: 1e-7)
+- `--verbose`: Enable detailed output of differences
+
+### Loss convergence
+To compare loss convergence with and without checkpointing, we add the possibility to log loss values for each step to a csv file that will be stored in the experiment folder.
+Just add the parameter: `--log-loss-to-csv`.
