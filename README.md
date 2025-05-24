@@ -43,9 +43,34 @@ Use this environment for development. Activate it by calling:
 conda activate pyrecover
 ```
 
+#### Installation with Flash Attention
+
+To install with Flash Attention support, ensure you have the following prerequisites:
+- CUDA toolkit (compatible with your PyTorch installation)
+- C++ compiler (gcc/g++)
+- Python development headers
+
+Then install with:
+```
+./setup_flashattention.sh
+```
+or
+```
+pip install ".[flash-attention]"
+```
+
+After this you can activate flash attention as argument. The isntalletion can take un to 2h.
+In the slurm script flash attention is attempted to be installed if its activated. This is to make slurm runs as stateless as possible without needing this installation in a container or environment before.
+
 ## Training
 
 The codebase contains example code for training a Transformer model on a parquet dataset. It's designed to work with SLURM, automatically detecting when multiple GPUs are available and enabling distributed training via DDP (DistributedDataParallel).
+
+
+### Command Line Arguments
+
+The training script (`train.py`) accepts various arguments to customize the training process. Here are the key parameters:
+
 | Argument                       | Description                                   | Default                                                         |
 |--------------------------------|-----------------------------------------------|-----------------------------------------------------------------|
 | `--dataset`                    | Path to parquet file with text data           | `/capstor/store/cscs/ethz/large-sc/datasets/train_data.parquet` |
@@ -62,6 +87,7 @@ The codebase contains example code for training a Transformer model on a parquet
 | `--use-torch-distributed-ckpt` | Use distributed checkpointing                 | False                                                           |
 | `--compile`                    | Compile model with torch.compile              | False                                                           |
 | `--fused-optimizer`            | Use fused optimizer                           | False                                                           |
+| `--use_flash_attention`        | Use flash-attention in the model              | False                                                           |
 | `--log-loss-to-csv`            | Log loss to a csv for plots/comparison        | False                                                           |
 
 For a complete list of arguments, run:
@@ -107,6 +133,7 @@ The submission script supports the following arguments:
 | `--exp_name=NAME`              | Set experiment name (affects checkpoint subfolder) |
 | `--continue`                   | Resume from latest checkpoint                      |
 | `--use_torch_distributed_ckpt` | Use torch distributed checkpointing                |
+| `--use_flash_attention`        | Use and install flash-attention in the model       |
 | `--log-loss-to-csv`            | Log the loss of the training to a csv file         |
 
 #### Time-Aware Job Management

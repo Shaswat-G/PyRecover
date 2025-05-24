@@ -95,6 +95,7 @@ def train(args):
         rope_theta=500000,
         vocab_size=tokenizer.vocab_size,
         seq_len=args.sequence_length,
+        use_flash_attention=args.use_flash_attention
     )
     with set_default_dtype(model_dtype):
         model = Transformer(model_config).to(device)

@@ -248,10 +248,15 @@ def get_args():
         help="Enable time-aware checkpointing and early stopping based on SLURM walltime.",
     )
     parser.add_argument(
+        "--use_flash_attention",
+        action="store_true",
+        help="Replaces default attention with flash-attention in the transformer. Must install flash-attention first.",
+    )
+   parser.add_argument(
         "--log-loss-to-csv",
         action="store_true",
         help="Log loss values to a CSV file in the experiment directory"
     )
-
+  
     args = parser.parse_args()
     return args
