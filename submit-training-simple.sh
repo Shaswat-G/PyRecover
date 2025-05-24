@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=pyrecover_run  # A name for your job. Visible in squeue.
 #SBATCH --account=a-large-sc
-#SBATCH --nodes=2 # On clariden we can only get resources in full node pieces (thus its not needed to set memory or cpus)
+#SBATCH --nodes=1 # On clariden we can only get resources in full node pieces (thus its not needed to set memory or cpus)
 #SBATCH --ntasks-per-node=4      # 4 tasks per node (1 per GPU) (with torchrun this would be 1)
 #SBATCH --gpus-per-node=4        # with our setup, set to 1 if train non parallel and 4 if training parallel 
-#SBATCH --time=00:15:00 # HH:MM:SS, set a time limit for this job
-#SBATCH --partition=debug # "normal"(24h max runtime) or "debug"(30min max runtime)
+#SBATCH --time=00:40:00 # HH:MM:SS, set a time limit for this job
+#SBATCH --partition=normal # "normal"(24h max runtime) or "debug"(30min max runtime)
 #SBATCH --environment=/users/rkreft/scratch/ngc_pt_jan.toml # the environment to use
 #SBATCH --output=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.out # log file for stdout / prints etc
 #SBATCH --error=/iopsstor/scratch/cscs/%u/llm_benchmark_%j.err # log file for stderr / errors
@@ -119,10 +119,10 @@ export WORLD_SIZE=$(( SLURM_NNODES * SLURM_NTASKS_PER_NODE ))
 echo "[sbatch-master] execute command on compute nodes"
 
 # Set common parameters
-TRAINING_STEPS=600
+TRAINING_STEPS=3000
 LOGGING_FREQ=10
-CHECKPOINT_FREQ=-1
-GLOBAL_BATCH_SIZE=8
+CHECKPOINT_FREQ=1000
+GLOBAL_BATCH_SIZE=4
 ITER_TIME=1
 CKPT_TIME=10
 
@@ -142,7 +142,8 @@ cd /users/$USER/scratch/PyRecover
 python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG $USE_FLASH_ATTENTION_FLAG $LOG_LOSS_FLAG $FUSED_FLAG $COMPILE_FLAG $SEQ_LEN_ARG $PROFILE
 "
 
-if [[ "$PROFILE" == "--profile" ]]; then
+if [[ "$PROFILING" == "--profile" ]]; then
+    echo "Running nsys..."
     nsys profile -s none -w true \
         --trace="nvtx,cudnn,cublas,cuda" \
         --output="${NSYS_OUT}/trace.nsys-rep" \
@@ -150,7 +151,7 @@ if [[ "$PROFILE" == "--profile" ]]; then
         --capture-range=cudaProfilerApi \
         --capture-range-end=stop -x true \
         numactl --membind=0-3 \
-        $CMD > "${NSYS_OUT}/stdout.log" 2> "${NSYS_OUT}/stderr.log"
+        $CMD
     else
     # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
     srun bash -c "$CMD"
