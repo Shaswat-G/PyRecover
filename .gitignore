@@ -179,3 +179,4 @@ cython_debug/
 # local dev folders
 checkpoints/
 logs/
+csv_files/
