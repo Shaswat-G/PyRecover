@@ -252,7 +252,7 @@ def get_args():
         action="store_true",
         help="Replaces default attention with flash-attention in the transformer. Must install flash-attention first.",
     )
-   parser.add_argument(
+    parser.add_argument(
         "--log-loss-to-csv",
         action="store_true",
         help="Log loss values to a CSV file in the experiment directory"

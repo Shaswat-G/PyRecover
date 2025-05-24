@@ -54,6 +54,10 @@ TORCH_DIST_CKPT_FLAG=""
 TIMEAWARE_CKPT_FLAG=""
 USE_FLASH_ATTENTION_FLAG=""
 LOG_LOSS_FLAG=""
+# Assignment 2 flags for fused optimization sequence length and model compilation
+FUSED_FLAG=""
+SEQ_LEN_ARG=""
+COMPILE_FLAG=""
 
 for arg in "$@"; do
   if [ "$arg" == "--distributed" ]; then
@@ -88,6 +92,19 @@ for arg in "$@"; do
     LOG_LOSS_FLAG="--log-loss-to-csv"
     echo "Logging loss to file!"
   fi
+  if [[ "$arg" == "--fused-optimizer" ]]; then
+    FUSED_FLAG="--fused-optimizer"
+    echo "USe fused optimizer"
+  fi
+  if [[ "$arg" == "--compile" ]]; then
+    COMPILE_FLAG="--compile"
+    echo "Use compiled model!"
+  fi
+  if [[ "$arg" == --sequence-length=* ]]; then
+    # Extract the value after the equals sign
+    SEQ_LEN_ARG="${arg#*=}"
+    echo "Seq-Length: $SEQ_LEN_ARG"
+  fi
 done
 
 # The defined environment vars will be shared with the other compute nodes.
@@ -117,8 +134,17 @@ echo \"[srun] rank=\$SLURM_PROCID host=\$(hostname) noderank=\$SLURM_NODEID loca
 cd /users/$USER/scratch/PyRecover
 # run the script
 
-python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG $USE_FLASH_ATTENTION_FLAG $LOG_LOSS_FLAG
+python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG $USE_FLASH_ATTENTION_FLAG $LOG_LOSS_FLAG $FUSED_FLAG $COMPILE_FLAG $SEQ_LEN_ARG
 "
+
+#      nsys profile -s none -w true \
+#        --trace="nvtx,cudnn,cublas,cuda" \
+#        --output="${NSYS_OUT}/trace.nsys-rep" \
+#        --force-overwrite true \
+#        --capture-range=cudaProfilerApi \
+#        --capture-range-end=stop -x true \
+#        numactl --membind=0-3 \
+#        $CMD > "${NSYS_OUT}/stdout.log" 2> "${NSYS_OUT}/stderr.log"
 
 
 # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
