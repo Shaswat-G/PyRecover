@@ -2,7 +2,7 @@
 #SBATCH --job-name=pyrecover_run  # A name for your job. Visible in squeue.
 #SBATCH --account=a-large-sc
 #SBATCH --nodes=1 # On clariden we can only get resources in full node pieces (thus its not needed to set memory or cpus)
-#SBATCH --ntasks-per-node=4      # 4 tasks per node (1 per GPU) (with torchrun this would be 1)
+#SBATCH --ntasks-per-node=1      # 4 tasks per node (1 per GPU) (with torchrun this would be 1)
 #SBATCH --gpus-per-node=4        # with our setup, set to 1 if train non parallel and 4 if training parallel 
 #SBATCH --time=00:40:00 # HH:MM:SS, set a time limit for this job
 #SBATCH --partition=normal # "normal"(24h max runtime) or "debug"(30min max runtime)
@@ -122,7 +122,7 @@ echo "[sbatch-master] execute command on compute nodes"
 TRAINING_STEPS=3000
 LOGGING_FREQ=10
 CHECKPOINT_FREQ=1000
-GLOBAL_BATCH_SIZE=4
+GLOBAL_BATCH_SIZE=1
 ITER_TIME=1
 CKPT_TIME=10
 
@@ -144,14 +144,18 @@ python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_F
 
 if [[ "$PROFILING" == "--profile" ]]; then
     echo "Running nsys..."
+    CMD="
+    echo \"[srun] rank=\$SLURM_PROCID host=\$(hostname) noderank=\$SLURM_NODEID localrank=\$SLURM_LOCALID\"
+    cd /users/$USER/scratch/PyRecover
     nsys profile -s none -w true \
-        --trace="nvtx,cudnn,cublas,cuda" \
-        --output="/users/rkreft/scratch/trace.nsys-rep" \
+        --trace=\"nvtx,cudnn,cublas,cuda\" \
+        --output=\"/users/rkreft/scratch/trace.nsys-rep\" \
         --force-overwrite true \
         --capture-range=cudaProfilerApi \
         --capture-range-end=stop -x true \
         numactl --membind=0-3 \
-        python train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG $USE_FLASH_ATTENTION_FLAG $LOG_LOSS_FLAG $FUSED_FLAG $COMPILE_FLAG $SEQ_LEN_ARG $PROFILING
+        python train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG $USE_FLASH_ATTENTION_FLAG $LOG_LOSS_FLAG $FUSED_FLAG $COMPILE_FLAG $SEQ_LEN_ARG $PROFILING"
+    srun bash -c "$CMD"
 else
     # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
     srun bash -c "$CMD"
