@@ -316,4 +316,57 @@ This section provides a comprehensive explanation of the core scripts in PyRecov
 
 ---
 
-If you have further questions, please consult the code comments or open an issue on the repository.
+# Additional Details from Source Code
+
+## `utils.py` (Additional Details)
+
+- **Gradient Clipping**: The function `clip_grad_norm_()` uses PyTorch's `get_total_norm` and `clip_grads_with_norm_` to clip gradients, ensuring training stability.
+- **Precision Mapping**: The dictionary `PRECISION_STR_TO_DTYPE` allows flexible selection of model precision (fp16, bf16, fp32, fp64) via command-line arguments.
+- **Context Manager**: `set_default_dtype()` is a context manager to temporarily set the default PyTorch dtype, useful for mixed-precision training.
+- **Argument Parsing**: `get_args()` provides a comprehensive set of command-line arguments, including options for distributed training, checkpointing, profiling, logging, and model configuration.
+
+## `model.py` (Additional Details)
+
+- **TransformerModelArgs**: A dataclass for all model hyperparameters, including support for rotary embeddings and flash attention.
+- **RMSNorm**: Implements Root Mean Square Layer Normalization for stable training.
+- **Rotary Embedding Functions**: Includes `precompute_freqs_cis`, `reshape_for_broadcast`, and `apply_rotary_emb` for efficient rotary positional encoding.
+- **Attention**: Multi-head self-attention with support for rotary embeddings and optional flash attention. Handles key/value head repetition for multi-query attention.
+- **FeedForward**: Implements the MLP block with configurable hidden dimension and activation.
+- **TransformerBlock**: Stacks attention and feedforward layers with normalization and residual connections.
+- **Transformer**: The main model class, stacks multiple `TransformerBlock`s, applies token embeddings, normalization, and projects to vocabulary logits.
+
+## `dist_utils.py` (Additional Details)
+
+- **Distributed Setup**: Functions to initialize and clean up PyTorch DDP using SLURM environment variables. Handles rank, world size, and device assignment.
+- **Logging**: `log_rank0()` and `log_rank()` ensure only rank 0 (or a specific rank) logs messages, avoiding clutter in distributed runs.
+- **SLURM Integration**: `get_slurm_job_end_time_env()` fetches the SLURM job end time for time-aware checkpointing and graceful shutdown.
+
+## `train.py` (Additional Details)
+
+- **Training Loop**: Handles distributed and non-distributed training, model/optimizer/scheduler setup, and checkpointing (vanilla or torch.distributed.checkpoint).
+- **Profiling**: Supports NSYS profiling via command-line flags, with start/end step control.
+- **Loss Logging**: Optionally logs loss to CSV for later analysis.
+- **Time-Aware Checkpointing**: Optionally monitors SLURM job end time to save a final checkpoint before the job is killed.
+- **Resuming**: Can resume from latest or specified checkpoint, restoring model, optimizer, and scheduler state.
+- **Device Management**: Automatically selects the correct CUDA device for each process in distributed mode.
+
+---
+
+# Quick Reference: Key Features
+
+- **Flexible Model Configuration**: All model and training hyperparameters are configurable via command-line arguments.
+- **Distributed Training**: Seamless support for single-node and multi-node distributed training with SLURM and PyTorch DDP.
+- **Checkpointing**: Supports both vanilla PyTorch and torch.distributed.checkpoint for efficient and robust checkpointing.
+- **Profiling**: Integrated NSYS profiling for performance analysis, with step-based control.
+- **Logging**: Detailed logging to console and optional CSV for loss tracking.
+- **Time-Aware Checkpointing**: Prevents job preemption by saving a final checkpoint before SLURM timeouts.
+- **Rotary Embeddings & Flash Attention**: Modern transformer features for improved efficiency and scalability.
+
+---
+
+# For More Information
+
+- See code comments in each file for further details and usage examples.
+- For troubleshooting and advanced usage, consult the function docstrings and argument help messages (`python train.py --help`).
+
+# End of Documentation
