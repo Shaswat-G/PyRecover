@@ -141,6 +141,8 @@ The submission script supports the following arguments:
 | `--fused-optimizer`            | Activate using the fused optimizer for training    |
 | `--profile-nsys`               | Run the nsys profiling. Only support run with one GPU, so adapt batch script accordingly  |
 
+> **Note:** NSYS profiling (`--profile-nsys`) is only supported for single-GPU runs. The script will automatically handle the required setup.
+
 #### Time-Aware Job Management
 
 The script automatically computes the job end time based on the SLURM time limit and makes it available to the training script. This enables graceful stopping and checkpointing as the job approaches its time limit.
@@ -229,3 +231,5 @@ python check_weights_equality.py <checkpoint1> <checkpoint2> [--distributed] [--
 ### Loss convergence
 To compare loss convergence with and without checkpointing, we add the possibility to log loss values for each step to a csv file that will be stored in the experiment folder.
 Just add the parameter: `--log-loss-to-csv`.
+
+> To compare loss convergence across runs, use the `--log-loss-to-csv` flag. This will save step-wise loss values in a CSV file in the experiment directory for easy plotting and analysis.
