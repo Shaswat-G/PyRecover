@@ -1,5 +1,7 @@
-from model import Transformer, TransformerModelArgs
 from transformers import AutoTokenizer
+
+from model import Transformer, TransformerModelArgs
+
 
 def main():
     tokenizer = AutoTokenizer.from_pretrained("unsloth/Mistral-Nemo-Base-2407-bnb-4bit")
@@ -17,6 +19,7 @@ def main():
     model = Transformer(model_config)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params}")
+
 
 if __name__ == "__main__":
     main()

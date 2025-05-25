@@ -2,8 +2,9 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
+
 
 @dataclass
 class TransformerModelArgs:
@@ -16,10 +17,10 @@ class TransformerModelArgs:
     norm_eps: float = 1e-5
     rope_theta: float = 10000
     norm_type: str = "rmsnorm"
-    seq_len: int = 2048 # defined later by config
+    seq_len: int = 2048  # defined later by config
     vocab_size: int = -1  # defined later by tokenizer
     use_flash_attention: bool = False
-    
+
 
 class RMSNorm(nn.Module):
     """
@@ -46,6 +47,7 @@ class RMSNorm(nn.Module):
     def forward(self, x: torch.Tensor):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
+
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
     """
@@ -94,6 +96,7 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor) -> torch.Ten
     assert freqs_cis.shape == (seqlen, x.shape[-1])
     shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
     return freqs_cis.view(*shape)
+
 
 def apply_rotary_emb(
     xq: torch.Tensor,
@@ -176,12 +179,17 @@ class Attention(nn.Module):
         self.use_flash_attention = model_args.use_flash_attention
         if self.use_flash_attention:
             from flash_attn.flash_attn_interface import flash_attn_func
-            self.attn_func=lambda *args, **kwargs: (
-                kwargs.update(causal=kwargs.pop("is_causal")) if "is_causal" in kwargs else None,
-                flash_attn_func(*args, **kwargs)[0]
+
+            self.attn_func = lambda *args, **kwargs: (
+                (
+                    kwargs.update(causal=kwargs.pop("is_causal"))
+                    if "is_causal" in kwargs
+                    else None
+                ),
+                flash_attn_func(*args, **kwargs)[0],
             )[-1]
         else:
-            self.attn_func=F.scaled_dot_product_attention
+            self.attn_func = F.scaled_dot_product_attention
 
     def forward(
         self,
@@ -217,9 +225,7 @@ class Attention(nn.Module):
 
         # we use casual mask for training
         output = self.attn_func(xq, xk, xv, is_causal=True)
-        output = output.transpose(
-            1, 2
-        ).contiguous()
+        output = output.transpose(1, 2).contiguous()
         output = output.view(bs, seqlen, -1)
         return self.wo(output)
 
@@ -261,6 +267,7 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
 
 class TransformerBlock(nn.Module):
     """
@@ -319,6 +326,7 @@ class TransformerBlock(nn.Module):
         out = h + self.feed_forward(self.ffn_norm(h))
         return out
 
+
 class Transformer(nn.Module):
     """
     Transformer Module
@@ -346,7 +354,9 @@ class Transformer(nn.Module):
 
         self.tok_embeddings = nn.Embedding(model_args.vocab_size, model_args.dim)
 
-        self.register_buffer("freqs_cis", self._precompute_freqs_cis(), persistent=False)
+        self.register_buffer(
+            "freqs_cis", self._precompute_freqs_cis(), persistent=False
+        )
 
         self.layers = torch.nn.ModuleDict()
         for layer_id in range(model_args.n_layers):

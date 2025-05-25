@@ -1,7 +1,6 @@
 import argparse
 import functools
 import logging
-
 from contextlib import contextmanager
 
 import torch
@@ -255,8 +254,8 @@ def get_args():
     parser.add_argument(
         "--log-loss-to-csv",
         action="store_true",
-        help="Log loss values to a CSV file in the experiment directory"
+        help="Log loss values to a CSV file in the experiment directory",
     )
-  
+
     args = parser.parse_args()
     return args

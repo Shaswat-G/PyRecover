@@ -1,13 +1,20 @@
+from dataclasses import dataclass
+from typing import Dict, List
+
 import pyarrow.parquet as pq
+import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-from dataclasses import dataclass
-from typing import List, Dict
-import torch
 
 class ParquetDataset(Dataset):
-    def __init__(self, parquet_file: str, tokenizer: str, sequence_length: int, training_samples: int):
+    def __init__(
+        self,
+        parquet_file: str,
+        tokenizer: str,
+        sequence_length: int,
+        training_samples: int,
+    ):
         self.parquet_ds = pq.read_table(parquet_file, memory_map=True)
         self.real_length = len(self.parquet_ds)
         self.tokenizer = tokenizer
@@ -22,10 +29,11 @@ class ParquetDataset(Dataset):
         return self.tokenizer.encode_plus(
             sample_str,
             max_length=self.sequence_length + 1,
-            padding='max_length',
+            padding="max_length",
             truncation=True,
-            padding_side="right"
+            padding_side="right",
         )
+
 
 @dataclass
 class CollatorForCLM:
@@ -34,7 +42,9 @@ class CollatorForCLM:
 
     def __call__(self, examples: List[Dict[str, List[int]]]) -> Dict[str, torch.Tensor]:
         # Convert the list of dicts into a 2D tensor of shape (batch_size, sequence_length+1)
-        input_ids = torch.LongTensor([examples[i]["input_ids"] for i in range(len(examples))])  # (b, s+1)
+        input_ids = torch.LongTensor(
+            [examples[i]["input_ids"] for i in range(len(examples))]
+        )  # (b, s+1)
 
         # The model input is everything except the last token
         inputs = input_ids[:, :-1].clone()

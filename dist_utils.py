@@ -3,9 +3,10 @@ dist_utils.py: Distributed Training Utilities. Mostly related to process group a
 """
 
 import os
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 import torch
+
 from utils import logger
 
 

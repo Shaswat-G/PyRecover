@@ -1,5 +1,5 @@
-import time
 import csv
+import time
 from pathlib import Path
 
 import torch
@@ -7,30 +7,30 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from dataset import CollatorForCLM, ParquetDataset
+from dist_utils import get_slurm_job_end_time_env  # import the helper
 from dist_utils import (
-    maybe_init_distributed,
-    is_rank0,
     get_rank,
-    maybe_cleanup_distributed,
-    log_rank0,
     is_distributed_activated,
-    get_slurm_job_end_time_env,  # import the helper
+    is_rank0,
+    log_rank0,
+    maybe_cleanup_distributed,
+    maybe_init_distributed,
 )
 from model import Transformer, TransformerModelArgs
-from utils import (
-    build_lr_scheduler,
-    get_args,
-    get_num_params,
-    get_num_flop_per_token,
-    init_logger,
-    PRECISION_STR_TO_DTYPE,
-    set_default_dtype,
-)
 from pyrecover.checkpoint import (
-    save_ckpt_vanilla,
+    load_ckpt_distributed,
     load_ckpt_vanilla,
     save_ckpt_distributed,
-    load_ckpt_distributed,
+    save_ckpt_vanilla,
+)
+from utils import (
+    PRECISION_STR_TO_DTYPE,
+    build_lr_scheduler,
+    get_args,
+    get_num_flop_per_token,
+    get_num_params,
+    init_logger,
+    set_default_dtype,
 )
 
 
@@ -95,7 +95,7 @@ def train(args):
         rope_theta=500000,
         vocab_size=tokenizer.vocab_size,
         seq_len=args.sequence_length,
-        use_flash_attention=args.use_flash_attention
+        use_flash_attention=args.use_flash_attention,
     )
     with set_default_dtype(model_dtype):
         model = Transformer(model_config).to(device)
@@ -145,9 +145,9 @@ def train(args):
     csv_writer = None
     if args.log_loss_to_csv and is_rank0():
         csv_path = exp_ckpt_path / f"{args.experiment_name}_loss_log.csv"
-        csv_file = open(csv_path, 'w', newline='')
+        csv_file = open(csv_path, "w", newline="")
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Step', 'Loss'])
+        csv_writer.writerow(["Step", "Loss"])
         csv_file.flush()
 
     # Select checkpoint save/load functions based on args
@@ -164,13 +164,24 @@ def train(args):
     if args.timeaware_checkpointing:
         max_iter_time = float(args.default_iter_time)
         max_ckpt_time = float(args.default_ckpt_time)
-        ITERATION_BUFFER_MULTIPLIER = 10  # Multiplier for iteration time to account for buffer
-        CHECKPOINT_BUFFER_MULTIPLIER = 2  # Multiplier for checkpoint time to account for buffer
-        buffer_time = ITERATION_BUFFER_MULTIPLIER * max_iter_time + CHECKPOINT_BUFFER_MULTIPLIER * max_ckpt_time
-        log_rank0(f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}")
+        ITERATION_BUFFER_MULTIPLIER = (
+            10  # Multiplier for iteration time to account for buffer
+        )
+        CHECKPOINT_BUFFER_MULTIPLIER = (
+            2  # Multiplier for checkpoint time to account for buffer
+        )
+        buffer_time = (
+            ITERATION_BUFFER_MULTIPLIER * max_iter_time
+            + CHECKPOINT_BUFFER_MULTIPLIER * max_ckpt_time
+        )
+        log_rank0(
+            f"Initial max_iter_time: {max_iter_time}, max_ckpt_time: {max_ckpt_time}, buffer_time: {buffer_time}"
+        )
         job_end_time = get_slurm_job_end_time_env()
         if job_end_time is None:
-            log_rank0("Warning: SLURM_JOB_END_TIME is not set. Time-check logic will be skipped.")
+            log_rank0(
+                "Warning: SLURM_JOB_END_TIME is not set. Time-check logic will be skipped."
+            )
         log_rank0(f"SLURM_JOB_END_TIME: {job_end_time}")
     else:
         max_iter_time = None
@@ -216,7 +227,9 @@ def train(args):
             threshold_time = max_iter_time + max_ckpt_time + buffer_time
             if time_left < threshold_time:
                 should_stop = True
-                log_rank0(f"[TIME CHECK] Remaining time ({time_left:.2f}s) < threshold ({threshold_time:.2f}s). should_stop set to True.")
+                log_rank0(
+                    f"[TIME CHECK] Remaining time ({time_left:.2f}s) < threshold ({threshold_time:.2f}s). should_stop set to True."
+                )
 
         iter_start = time.perf_counter()
 
@@ -275,7 +288,9 @@ def train(args):
             tflops = num_flop_per_token * tps / 1e12
             training_tps = ntraining_tokens_since_last_log / time_delta
 
-            log_rank0(f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}")
+            log_rank0(
+                f"Epoch: {epoch} | Step: {train_step} | Loss: {loss.item():.2f} | Tokens per second: {tps:.2f} | Training tokens per second (%): {100*training_tps/tps:.2f} | MFU (%): {mfu:.2f} | TFLOPs: {tflops:.2f}"
+            )
             ntokens_since_last_log = 0
             ntraining_tokens_since_last_log = 0
             time_last_log = time.perf_counter()
@@ -320,7 +335,9 @@ def train(args):
             if args.timeaware_checkpointing and checkpoint_store_time > max_ckpt_time:
                 max_ckpt_time = checkpoint_store_time
                 log_rank0(f"Updated max_ckpt_time: {max_ckpt_time}")
-            log_rank0(f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds")
+            log_rank0(
+                f"Checkpoint store completed in {checkpoint_store_time:.2f} seconds"
+            )
 
         # Synchronize should_stop across all ranks
         if world_size > 1:
@@ -334,7 +351,9 @@ def train(args):
                 specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}_final"
             else:
                 specific_ckpt_path = exp_ckpt_path / f"ckpt_{train_step}_final.pt"
-            log_rank0(f"[TIME CHECK] Saving final checkpoint to {specific_ckpt_path} before exit.")
+            log_rank0(
+                f"[TIME CHECK] Saving final checkpoint to {specific_ckpt_path} before exit."
+            )
             checkpoint_store_start = time.perf_counter()
             save_ckpt_fn(
                 model,
@@ -350,7 +369,9 @@ def train(args):
                 rank=get_rank(),
             )
             checkpoint_store_time = time.perf_counter() - checkpoint_store_start
-            log_rank0(f"[TIME CHECK] Final checkpoint store completed in {checkpoint_store_time:.2f} seconds")
+            log_rank0(
+                f"[TIME CHECK] Final checkpoint store completed in {checkpoint_store_time:.2f} seconds"
+            )
             break
 
         # Profiling
@@ -366,9 +387,15 @@ def train(args):
 
     # Print training time information
     log_rank0(f"Training completed in {total_training_time:.2f} seconds")
-    log_rank0(f"Total checkpoint loading time: {total_checkpoint_load_time:.2f} seconds")
-    log_rank0(f"Total checkpoint storing time: {total_checkpoint_store_time:.2f} seconds")
-    log_rank0(f"Total checkpointing time: {(total_checkpoint_load_time + total_checkpoint_store_time):.2f} seconds")
+    log_rank0(
+        f"Total checkpoint loading time: {total_checkpoint_load_time:.2f} seconds"
+    )
+    log_rank0(
+        f"Total checkpoint storing time: {total_checkpoint_store_time:.2f} seconds"
+    )
+    log_rank0(
+        f"Total checkpointing time: {(total_checkpoint_load_time + total_checkpoint_store_time):.2f} seconds"
+    )
 
     maybe_cleanup_distributed()
 
