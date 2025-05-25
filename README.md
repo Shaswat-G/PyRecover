@@ -83,12 +83,14 @@ The training script (`train.py`) accepts various arguments to customize the trai
 | `--checkpoint-dir`             | Directory for checkpoints                     | "checkpoints/"                                                  |
 | `--checkpoint-frequency`       | Save checkpoint every N steps                 | 10                                                              |
 | `--resume-from-checkpoint`     | Path to checkpoint or "latest"                | None                                                            |
+| `--profile`                    | activates profiling support for nsys          | False                                                           |
 | `--experiment_name`            | Name of experiment (for checkpoint subfolder) | "default-exp"                                                   |
 | `--use-torch-distributed-ckpt` | Use distributed checkpointing                 | False                                                           |
 | `--compile`                    | Compile model with torch.compile              | False                                                           |
 | `--fused-optimizer`            | Use fused optimizer                           | False                                                           |
 | `--use_flash_attention`        | Use flash-attention in the model              | False                                                           |
 | `--log-loss-to-csv`            | Log loss to a csv for plots/comparison        | False                                                           |
+| `--timeaware-checkpointing`    | Activates time aware checkpointing            | False                                                           |
 
 For a complete list of arguments, run:
 ```bash
@@ -135,6 +137,9 @@ The submission script supports the following arguments:
 | `--use_torch_distributed_ckpt` | Use torch distributed checkpointing                |
 | `--use_flash_attention`        | Use and install flash-attention in the model       |
 | `--log-loss-to-csv`            | Log the loss of the training to a csv file         |
+| `--timeaware-checkpointing`    | Activate time-aware checkpointing in train script  |
+| `--fused-optimizer`            | Activate using the fused optimizer for training    |
+| `--profile-nsys`               | Run the nsys profiling. Only support run with one GPU, so adapt batch script accordingly  |
 
 #### Time-Aware Job Management
 
