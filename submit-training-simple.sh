@@ -146,13 +146,13 @@ if [[ "$PROFILING" == "--profile" ]]; then
     echo "Running nsys..."
     nsys profile -s none -w true \
         --trace="nvtx,cudnn,cublas,cuda" \
-        --output="trace.nsys-rep" \
+        --output="/users/rkreft/scratch/trace.nsys-rep" \
         --force-overwrite true \
         --capture-range=cudaProfilerApi \
         --capture-range-end=stop -x true \
         numactl --membind=0-3 \
-        python3 train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG $USE_FLASH_ATTENTION_FLAG $LOG_LOSS_FLAG $FUSED_FLAG $COMPILE_FLAG $SEQ_LEN_ARG $PROFILING
-    else
+        python train.py --training-steps $TRAINING_STEPS --logging-frequency $LOGGING_FREQ $DISTRIBUTED_FLAG --checkpoint-frequency $CHECKPOINT_FREQ --verify-checkpoints --batch-size=$GLOBAL_BATCH_SIZE --experiment_name=$EXPERIMENT_NAME --default-iter-time=$ITER_TIME --default-ckpt-time=$CKPT_TIME $RESUME_FLAG $TORCH_DIST_CKPT_FLAG $TIMEAWARE_CKPT_FLAG $USE_FLASH_ATTENTION_FLAG $LOG_LOSS_FLAG $FUSED_FLAG $COMPILE_FLAG $SEQ_LEN_ARG $PROFILING
+else
     # 1. Baseline (default settings: seq_len=2048, no fused optimizer, no compile)
     srun bash -c "$CMD"
 fi
